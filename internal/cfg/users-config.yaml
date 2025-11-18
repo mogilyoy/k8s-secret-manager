@@ -1,0 +1,14 @@
+
+
+admin:
+  - id: "356366758"
+    allowed_namespaces: ["*"] 
+developer:
+  - id: "987654321"
+    allowed_namespaces: ["dev-one", "staging"]
+  - id: "235634656"
+    allowed_namespaces: ["dev-two"]
+readonly:
+  - id: "987654421"
+    allowed_namespaces: ["dev-one", "dev-two", "staging"]
+  
