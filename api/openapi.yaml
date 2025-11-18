@@ -1,0 +1,530 @@
+
+openapi: 3.1.1
+
+info:
+  title: Chess website API
+  description: API Specification for Chess website
+  version: 0.0.1
+  license: 
+    name: Apache 2.0
+    identifier: Apache-2.0
+    
+servers:
+  - url: https://dev.k8s-vault.com/v1
+    description: Development server
+
+  - url: https://staging.k8s-vault.com/v1
+    description: Staging server
+
+  - url: https://api.k8s-vault.com/v1
+    description: Production server
+
+
+paths: 
+  /secrets:
+    post: 
+      tags: 
+        - secrets
+      summary: Create a scret 
+      operationId: CreateSecret
+      
+      requestBody: 
+        required: true
+        content: 
+          application/json:
+            schema: 
+              $ref: "#/components/schemas/CreateSecretRequest"
+            
+      responses:
+        "201":
+          $ref: "#/components/responses/OkResponse"
+      
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        
+        "404":
+          $ref: "#/components/responses/NotFound"
+        
+        "409":
+          $ref: "#/components/responses/Conflict"
+        
+        "500":
+          $ref: "#/components/responses/Internal"
+  
+    get: 
+      tags:
+        - secrets
+      summary: List available secrets 
+      operationId: ListSecrets
+    
+      parameters: 
+        - $ref: "#/components/parameters/Namespace"
+      
+      responses:
+        "200":
+          description: Success
+          content: 
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSecretsResponse"
+
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        
+        "404":
+          $ref: "#/components/responses/NotFound"
+        
+        "500":
+          $ref: "#/components/responses/Internal"
+  
+      
+  /secrets/{name}:
+    get: 
+      tags:
+        - secrets
+      summary: Get secret from vault
+      operationId: GetSecret
+      
+      parameters: 
+        - $ref: "#/components/parameters/Namespace"
+        - $ref: "#/components/parameters/ResourceName"
+            
+      responses:
+        "200":
+          description: Success
+          content: 
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecretResponse"
+
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        
+        "404":
+          $ref: "#/components/responses/NotFound"
+        
+        "500":
+          $ref: "#/components/responses/Internal"
+
+    put: 
+      tags:
+        - secrets
+      summary: Update secret
+      operationId: UpdateSecret
+
+      parameters: 
+        - $ref: "#/components/parameters/Namespace" 
+        - $ref: "#/components/parameters/ResourceName"
+      
+      requestBody: 
+        required: true
+        content: 
+          application/json:
+            schema: 
+              $ref: "#/components/schemas/UpdateSecretRequest"
+        
+      
+      responses: 
+        "200": 
+          $ref: "#/components/responses/OkResponse"
+        
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        
+        "404":
+          $ref: "#/components/responses/NotFound"
+        
+        "500":
+          $ref: "#/components/responses/Internal"
+        
+    delete: 
+      tags:
+        - secrets
+      summary: Delete secret
+      operationId: DeleteSecret
+
+      parameters: 
+        - $ref: "#/components/parameters/Namespace" 
+        - $ref: "#/components/parameters/ResourceName"
+        
+      responses: 
+        "200": 
+          $ref: "#/components/responses/OkResponse"
+        
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        
+        "404":
+          $ref: "#/components/responses/NotFound"
+        
+        "500":
+          $ref: "#/components/responses/Internal"
+  
+  /user/auth:
+    post: 
+      tags: 
+        -  user
+      summary: Exchange Tg InitData for JWT
+      operationId: AuthUser
+      
+      security: []
+      
+      requestBody: 
+        required: true
+        content:
+          application/json:
+            schema: 
+              $ref: "#/components/schemas/UserAuthRequest"
+        
+      responses: 
+        "200":
+          description: Success
+          content: 
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        
+        "404":
+          $ref: "#/components/responses/NotFound"
+        
+        "500":
+          $ref: "#/components/responses/Internal"
+      
+        
+
+components: 
+  parameters:
+    ResourceName:
+      name: name
+      in: path
+      required: true
+      schema: 
+        type: string
+        example: my-app-secret-db
+    
+    Namespace:
+      name: namespace
+      in: query
+      required: true
+      schema: 
+        type: string
+        example: staging
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses: 
+    OkResponse:
+      description: Success 
+      content: 
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OkResponse"
+
+    BadRequest:
+      description: 400 Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBadRequest"
+    
+    Unauthorized:
+      description: 401 Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorUnauthorized"
+    
+    Forbidden:
+      description: 403 Forbiden
+      content:
+        application/json:
+          schema: 
+            $ref: "#/components/schemas/ErrorForbidden"
+
+    NotFound:
+      description: 404 Not found
+      content:
+        application/json:
+          schema: 
+            $ref: "#/components/schemas/ErrorNotFound"
+    
+    Conflict:
+      description: 409 Conflict
+      content: 
+        application/json:
+          schema: 
+            $ref: "#/components/schemas/ErrorConflict"
+
+    Internal:
+      description: 500 Internal Server Error
+      content: 
+        application/json:
+          schema: 
+            $ref: "#/components/schemas/ErrorInternal"
+
+
+  schemas:
+    OkResponse:
+      type: object
+      properties: 
+        ok: 
+          type: boolean
+        
+    UserAuthRequest:
+      type: object
+      description: Request body to exchange Telegram initData for JWT.
+      required:
+        - init_data
+      properties:
+        init_data:
+          type: string
+          description: Telegram Web App initData string
+      
+    AuthResponse:
+      type: object
+      description: JWT token response 
+      required: 
+        - token
+      properties:
+        token:
+          type: string
+          description: JWT token
+        expiresIn:
+          type: integer
+          description: Lifetime of the token in seconds
+          example: 86400
+
+    CreateSecretRequest:
+      type: object
+      description: Request body for creating a new k8s secret
+      required:
+        - name
+        - namespace
+        - data
+      properties:
+        name:
+          type: string
+          description: The name of the secret
+          example: my-db-prod-creds
+        namespace:
+          type: string
+          description: The namespace where the secret will be created
+          example: production
+        data:
+          type: object
+          description: Key-value map of secret data. Base64 encoded strings
+          additionalProperties:
+            type: string
+        labels:
+          type: object 
+          description: Optional kubernetes labels for the secret
+          additionalProperties:
+            type: string
+        type:
+          type: string
+          description: Type of the secret
+          default: Opaque
+          example: Opaque
+        
+    SecretResponse:
+      type: object
+      description: Response of a k8s secret resources
+      properties:
+        name:
+          type: string
+          example: my-db-prod-creds
+        namespace:
+          type: string
+          example: production
+        data:
+          type: object
+          description: Key-value map of secret data. Base64 encoded strings
+          additionalProperties:
+            type: string
+            example: c3VwZXJfc2VjcmV0Xw==
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        type:
+          type: string
+          example: Opaque
+        # Добавляем метаданные для Production-Ready системы
+        creationTimestamp:
+          type: string
+          format: date-time
+          description: Timestamp when the secret was created
+        resourceVersion:
+          type: string
+          description: K8s version string used for optimistic locking
+    
+    SecretSummary:
+      type: object
+      description: Summary information about a secret
+      properties:
+        name:
+          type: string
+          example: my-db-prod-creds
+        type:
+          type: string
+          example: Opaque
+        creationTimestamp:
+          type: string
+          format: date-time
+          description: Timestamp when the secret was created
+
+    ListSecretsResponse:
+      type: object
+      description: List of secrets in the requested namespace
+      properties:
+        namespace:
+          type: string
+          example: staging
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecretSummary"
+          description: Array of secret objects
+        
+        
+    UpdateSecretRequest:
+      type: object
+      required:
+        - data
+      description: Request body to update the data of an existing Secret.
+      properties:
+        data:
+          type: object
+          description: Key-value map of secret data. Base64 encoded strings
+          additionalProperties:
+            type: string
+            example: "bXlfdmFsdWU="
+        labels:
+          type: object
+          description: Optional labels to update.
+          additionalProperties:
+            type: string
+        type:
+          type: string
+          description: Optional type of the secret 
+          example: Opaque
+
+    # Error schemas
+    ErrorBadRequest:
+      type: object
+      properties:
+        statusCode: 
+          type: integer
+          default: 400
+        errorCode: 
+          type: string
+          default: Bad request
+        errorMessage: 
+          type: string
+          example: Request body is invalid
+
+    ErrorUnauthorized:
+      type: object
+      properties: 
+        statusCode: 
+          type: integer
+          default: 401
+        errorCode:
+          type: string
+          default: Unauthorized
+        errorMessage: 
+          type: string
+          example: Invalid JWT 
+    
+    ErrorForbidden:
+      type: object
+      properties: 
+        statusCode: 
+          type: integer
+          default: 403
+        errorCode: 
+          type: string
+          default: Forbidden
+        errorMessage: 
+          type: string
+          example: You don't have permission 
+        
+    ErrorNotFound:
+      type: object
+      properties: 
+        statusCode: 
+          type: integer
+          default: 404
+        errorCode: 
+          type: string
+          default: Not found
+        errorMessage: 
+          type: string
+          example: Requested data cannot be found 
+
+    ErrorConflict:
+      type: object
+      properties:
+        statusCode: 
+          type: integer
+          default: 409
+        errorCode: 
+          type: string
+          default: Conflict
+        errorMessage: 
+          type: string
+          example: Conflict. Item already exists
+    
+    ErrorInternal:
+      type: object
+      properties:
+        statusCode: 
+          type: integer
+          default: 500
+        errorCode: 
+          type: string
+          default: Internal Server Error
+        errorMessage: 
+          type: string
+          example: Internal Server Error. Come back later
+
+
+security: 
+  - BearerAuth: []
+
+
+tags: 
+  - name: secrets 
+    description: Kubernetes secrets
+  - name: user
+    description: User methods
