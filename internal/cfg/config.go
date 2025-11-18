@@ -28,6 +28,8 @@ type Config struct {
 	AuthConfig Auth
 }
 
+var AppConfig Config
+
 func LoadConfig(configPath string) (*Config, error) {
 	fileContent, err := os.ReadFile(configPath)
 
@@ -54,10 +56,10 @@ func LoadConfig(configPath string) (*Config, error) {
 		JWTSecret:        jwtSecret,
 	}
 
-	AppConfig := &Config{
+	AppConfig = Config{
 		RoleConfig: userRolesCfg,
 		AuthConfig: authCfg,
 	}
 
-	return AppConfig, nil
+	return &AppConfig, nil
 }

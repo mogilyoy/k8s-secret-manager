@@ -23,7 +23,7 @@ func GenerateJWT(userID, role string, namespaces []string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	tokenString, err := token.SignedString(jwtSecret)
+	tokenString, err := token.SignedString()
 	if err != nil {
 		return "", fmt.Errorf("could not sign token: %w", err)
 	}
