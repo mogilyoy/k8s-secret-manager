@@ -347,13 +347,21 @@ components:
             type: string
         labels:
           type: object 
-          description: Optional kubernetes labels for the secret
+          description: Optional labels for the secret
           additionalProperties:
             type: string
         type:
           type: string
           description: Type of the secret
           default: Opaque
+          enum: 
+            - Opaque
+            - kubernetes.io/service-account-token
+            - kubernetes.io/tls
+            - kubernetes.io/dockercfg
+            - kubernetes.io/dockerconfigjson
+            - kubernetes.io/basic-auth
+            - kubernetes.io/ssh-auth
           example: Opaque
         
     SecretResponse:

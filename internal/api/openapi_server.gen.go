@@ -19,6 +19,17 @@ const (
 	BearerAuthScopes = "BearerAuth.Scopes"
 )
 
+// Defines values for CreateSecretRequestType.
+const (
+	KubernetesIobasicAuth           CreateSecretRequestType = "kubernetes.io/basic-auth"
+	KubernetesIodockercfg           CreateSecretRequestType = "kubernetes.io/dockercfg"
+	KubernetesIodockerconfigjson    CreateSecretRequestType = "kubernetes.io/dockerconfigjson"
+	KubernetesIoserviceAccountToken CreateSecretRequestType = "kubernetes.io/service-account-token"
+	KubernetesIosshAuth             CreateSecretRequestType = "kubernetes.io/ssh-auth"
+	KubernetesIotls                 CreateSecretRequestType = "kubernetes.io/tls"
+	Opaque                          CreateSecretRequestType = "Opaque"
+)
+
 // AuthResponse JWT token response
 type AuthResponse struct {
 	// ExpiresIn Lifetime of the token in seconds
@@ -33,7 +44,7 @@ type CreateSecretRequest struct {
 	// Data Key-value map of secret data. Base64 encoded strings
 	Data map[string]string `json:"data"`
 
-	// Labels Optional kubernetes labels for the secret
+	// Labels Optional labels for the secret
 	Labels *map[string]string `json:"labels,omitempty"`
 
 	// Name The name of the secret
@@ -43,8 +54,11 @@ type CreateSecretRequest struct {
 	Namespace string `json:"namespace"`
 
 	// Type Type of the secret
-	Type *string `json:"type,omitempty"`
+	Type *CreateSecretRequestType `json:"type,omitempty"`
 }
+
+// CreateSecretRequestType Type of the secret
+type CreateSecretRequestType string
 
 // ErrorBadRequest defines model for ErrorBadRequest.
 type ErrorBadRequest struct {
