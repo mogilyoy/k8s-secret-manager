@@ -32,24 +32,6 @@ func GenerateJWT(userID, role string, namespaces []string) (string, error) {
 	return tokenString, nil
 }
 
-func GetUserPermissions(userID string) (role string, namespaces []string, err error) {
-	roleMappings := map[string][]cfg.UserCfg{
-		"admin":     cfg.AppConfig.RoleConfig.Admin,
-		"developer": cfg.AppConfig.RoleConfig.Developer,
-		"readonly":  cfg.AppConfig.RoleConfig.Readonly,
-	}
-
-	for role, users := range roleMappings {
-		for _, user := range users {
-			if user.ID == userID {
-				return role, user.AllowedNamespaces, nil
-			}
-
-		}
-	}
-	return "", nil, fmt.Errorf("user not found in config")
-}
-
 func GetClaimsFromToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 

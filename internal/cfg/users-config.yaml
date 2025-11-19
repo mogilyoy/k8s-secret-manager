@@ -8,7 +8,7 @@ developer:
     allowed_namespaces: ["dev-one", "staging"]
   - id: "235634656"
     allowed_namespaces: ["dev-two"]
-readonly:
+guest:
   - id: "987654421"
     allowed_namespaces: ["dev-one", "dev-two", "staging"]
   

@@ -685,6 +685,15 @@ func (response ListSecrets401JSONResponse) VisitListSecretsResponse(w http.Respo
 	return json.NewEncoder(w).Encode(response)
 }
 
+type ListSecrets403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListSecrets403JSONResponse) VisitListSecretsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type ListSecrets404JSONResponse struct{ NotFoundJSONResponse }
 
 func (response ListSecrets404JSONResponse) VisitListSecretsResponse(w http.ResponseWriter) error {
@@ -869,6 +878,15 @@ type GetSecret401JSONResponse struct{ UnauthorizedJSONResponse }
 func (response GetSecret401JSONResponse) VisitGetSecretResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetSecret403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetSecret403JSONResponse) VisitGetSecretResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 
 	return json.NewEncoder(w).Encode(response)
 }

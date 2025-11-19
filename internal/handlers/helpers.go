@@ -2,56 +2,70 @@ package handlers
 
 import (
 	"encoding/base64"
-	"fmt"
 
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
-	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
-func decodeSecretData(data map[string]string) (map[string][]byte, error) {
-	// Turn base64 data into map[string][]byte
-	k8sData := make(map[string][]byte, len(data))
-
-	for key, base64Value := range data {
-
-		decodedBytes, err := base64.StdEncoding.DecodeString(base64Value)
-		if err != nil {
-
-			return nil, fmt.Errorf("data key '%s' has invalid Base64 encoding: %w", key, err)
-		}
-		k8sData[key] = decodedBytes
-	}
-
-	return k8sData, nil
+func StrPnc(v string) *string {
+	return &v
 }
 
-func ToK8sSecret(req api.CreateSecretRequest) (*v1.Secret, error) {
+func IntPnc(v int) *int {
+	return &v
+}
 
-	k8sData, err := decodeSecretData(req.Data)
-	if err != nil {
-		return nil, err
+func BoolPnc(v bool) *bool {
+	return &v
+}
+
+func MapStrStrPnc(v map[string]string) *map[string]string {
+	return &v
+}
+
+func EncodeSecretData(data map[string][]byte) map[string]string {
+	outputData := make(map[string]string)
+
+	for key, bytesArray := range data {
+		encodedBytes := base64.StdEncoding.EncodeToString(bytesArray)
+		outputData[key] = encodedBytes
+	}
+	return outputData
+}
+
+func ToSecretListResponse(k8sList *corev1.SecretList) *api.ListSecretsResponse {
+
+	if k8sList == nil || len(k8sList.Items) == 0 {
+
+		emptyItems := make([]api.SecretSummary, 0)
+		return &api.ListSecretsResponse{
+			Items: &emptyItems,
+
+			Namespace: StrPnc(k8sList.ResourceVersion),
+		}
 	}
 
-	secretType := v1.SecretTypeOpaque // default type
-	if req.Type != nil {
-		secretType = v1.SecretType(*req.Type)
+	summaries := make([]api.SecretSummary, 0, len(k8sList.Items))
+
+	for _, item := range k8sList.Items {
+
+		summary := api.SecretSummary{
+
+			CreationTimestamp: &item.ObjectMeta.CreationTimestamp.Time,
+
+			Name: StrPnc(item.Name),
+
+			Type: StrPnc(string(item.Type)),
+		}
+
+		summaries = append(summaries, summary)
 	}
 
-	labels := make(map[string]string)
-	if req.Labels != nil {
-		labels = *req.Labels
-	}
+	namespace := k8sList.Items[0].Namespace
 
-	secret := &v1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      req.Name,
-			Namespace: req.Namespace,
-			Labels:    labels,
-		},
-		Data: k8sData,
-		Type: secretType,
-	}
+	return &api.ListSecretsResponse{
 
-	return secret, nil
+		Items:     &summaries,
+		Namespace: StrPnc(namespace),
+	}
 }
