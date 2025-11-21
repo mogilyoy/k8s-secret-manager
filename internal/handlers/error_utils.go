@@ -84,6 +84,19 @@ func BuildCreateSecretErrorResponse(res ErrorResult) api.CreateSecretResponseObj
 		return api.CreateSecret500JSONResponse{InternalJSONResponse: commonBody}
 	}
 }
+func BuildListSecretErrorResponse(res ErrorResult) api.ListSecretsResponseObject {
+	commonBody := getCommonBody(res)
+	switch res.StatusCode {
+	case 400:
+		return api.ListSecrets400JSONResponse{BadRequestJSONResponse: api.BadRequestJSONResponse(commonBody)}
+	case 403:
+		return api.ListSecrets403JSONResponse{ForbiddenJSONResponse: api.ForbiddenJSONResponse(commonBody)}
+	case 404:
+		return api.ListSecrets404JSONResponse{NotFoundJSONResponse: api.NotFoundJSONResponse(commonBody)}
+	default:
+		return api.ListSecrets500JSONResponse{InternalJSONResponse: commonBody}
+	}
+}
 
 func BuildGetSecretErrorResponse(res ErrorResult) api.GetSecretResponseObject {
 	commonBody := getCommonBody(res)
@@ -99,16 +112,30 @@ func BuildGetSecretErrorResponse(res ErrorResult) api.GetSecretResponseObject {
 	}
 }
 
-func BuildListSecretErrorResponse(res ErrorResult) api.ListSecretsResponseObject {
+func BuildUpdateSecretErrorResponse(res ErrorResult) api.UpdateSecretResponseObject {
 	commonBody := getCommonBody(res)
 	switch res.StatusCode {
 	case 400:
-		return api.ListSecrets400JSONResponse{BadRequestJSONResponse: api.BadRequestJSONResponse(commonBody)}
+		return api.UpdateSecret400JSONResponse{BadRequestJSONResponse: api.BadRequestJSONResponse(commonBody)}
 	case 403:
-		return api.ListSecrets403JSONResponse{ForbiddenJSONResponse: api.ForbiddenJSONResponse(commonBody)}
+		return api.UpdateSecret403JSONResponse{ForbiddenJSONResponse: api.ForbiddenJSONResponse(commonBody)}
 	case 404:
-		return api.ListSecrets404JSONResponse{NotFoundJSONResponse: api.NotFoundJSONResponse(commonBody)}
+		return api.UpdateSecret404JSONResponse{NotFoundJSONResponse: api.NotFoundJSONResponse(commonBody)}
 	default:
-		return api.ListSecrets500JSONResponse{InternalJSONResponse: commonBody}
+		return api.UpdateSecret500JSONResponse{InternalJSONResponse: commonBody}
+	}
+}
+
+func BuildDeleteSecretErrorResponse(res ErrorResult) api.DeleteSecretResponseObject {
+	commonBody := getCommonBody(res)
+	switch res.StatusCode {
+	case 400:
+		return api.DeleteSecret400JSONResponse{BadRequestJSONResponse: api.BadRequestJSONResponse(commonBody)}
+	case 403:
+		return api.DeleteSecret403JSONResponse{ForbiddenJSONResponse: api.ForbiddenJSONResponse(commonBody)}
+	case 404:
+		return api.DeleteSecret404JSONResponse{NotFoundJSONResponse: api.NotFoundJSONResponse(commonBody)}
+	default:
+		return api.DeleteSecret500JSONResponse{InternalJSONResponse: commonBody}
 	}
 }

@@ -2,22 +2,41 @@ package k8s
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/mogilyoy/k8s-secret-manager/internal/api"
-	v1 "k8s.io/api/core/v1"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	secretsv1alpha1 "github.com/mogilyoy/k8s-secret-manager/api/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
-func (m *K8sSecretManager) CreateSecret(ctx context.Context, secret *v1.Secret) (*v1.Secret, error) {
-	return m.Clientset.CoreV1().Secrets(secret.Namespace).Create(ctx, secret, metav1.CreateOptions{})
+type SecretClaimsInterface interface {
+	CreateSecretClaim(ctx context.Context, name, namespace, claimType string, data map[string]string) error
+	GetSecretClaim(ctx context.Context, name, namespace string) (*secretsv1alpha1.SecretClaim, error)
+	ListSecretClaim(ctx context.Context, namespace string) (*secretsv1alpha1.SecretClaimList, error)
+	UpdateSecretClaim(ctx context.Context, name, namespace, claimType string, regenerate bool, data map[string]string) (*secretsv1alpha1.SecretClaim, error)
+	DeleteSecretClaim(ctx context.Context, name, namespace string) error
 }
 
-func (m *K8sSecretManager) GetSecret(ctx context.Context, request api.GetSecretRequestObject) (*v1.Secret, error) {
-	return m.Clientset.CoreV1().Secrets(request.Params.Namespace).Get(ctx, request.Name, metav1.GetOptions{})
-
+type K8sDynamicClient struct {
+	Client client.Client
 }
 
-func (m *K8sSecretManager) ListSecrets(ctx context.Context, namespace string) (*v1.SecretList, error) {
-	return m.Clientset.CoreV1().Secrets(namespace).List(ctx, metav1.ListOptions{})
+func NewK8sSecretManager() (*K8sDynamicClient, error) {
+
+	scheme := runtime.NewScheme()
+
+	// Регистрируем наши типы (SecretClaim) в схеме
+	if err := secretsv1alpha1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add scheme: %w", err)
+	}
+
+	cl, err := client.New(config.GetConfigOrDie(), client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client: %w", err)
+	}
+
+	return &K8sDynamicClient{Client: cl}, nil
 }

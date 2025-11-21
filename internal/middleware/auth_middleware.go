@@ -2,34 +2,29 @@ package middleware
 
 import (
 	"context"
-	"log"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/mogilyoy/k8s-secret-manager/internal/auth"
 )
 
-// AuthMiddleware проверяет JWT, декодирует Claims и помещает их в контекст.
-func AuthMiddleware(next http.Handler) http.Handler {
+func JWTAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
+		token := r.Header.Get("Authorization")
 
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			http.Error(w, "Unauthorized: Bearer token required", http.StatusUnauthorized)
-			return
-		}
+		claims, err := auth.GetClaimsFromToken(token)
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
-		claims, err := auth.GetClaimsFromToken(tokenString)
 		if err != nil {
-			log.Printf("JWT validation error: %v", err)
-			http.Error(w, "Unauthorized: Invalid or expired token", http.StatusUnauthorized)
+			if errors.Is(err, auth.ErrUnauthorizedToken) {
+				sendErrorResponse(w, http.StatusUnauthorized, "Unauthorized", "Invalid or expired token.")
+				return
+			}
+
+			sendErrorResponse(w, http.StatusInternalServerError, "InternalError", "Server error during authentication.")
 			return
 		}
 
 		ctx := context.WithValue(r.Context(), auth.ClaimsContextKey, claims)
-
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

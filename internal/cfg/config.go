@@ -15,7 +15,6 @@ type UserCfg struct {
 type UserRolesConfig struct {
 	Admin     []UserCfg `yaml:"admin"`
 	Developer []UserCfg `yaml:"developer"`
-	Guest     []UserCfg `yaml:"guest"`
 }
 
 type Auth struct {

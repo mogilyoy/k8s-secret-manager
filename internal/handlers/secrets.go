@@ -6,10 +6,9 @@ import (
 
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
 	"github.com/mogilyoy/k8s-secret-manager/internal/auth"
-	"github.com/mogilyoy/k8s-secret-manager/internal/k8s"
 )
 
-func (h *SecretHandler) CreateSecret(ctx context.Context, request api.CreateSecretRequest) (api.CreateSecretResponseObject, error) {
+func (h *SecretHandler) CreateSecret(ctx context.Context, request api.CreateSecretRequestObject) (api.CreateSecretResponseObject, error) {
 	claims, err := auth.GetClaimsFromContext(ctx)
 	if err != nil {
 		return BuildCreateSecretErrorResponse(ErrorResult{
@@ -19,7 +18,7 @@ func (h *SecretHandler) CreateSecret(ctx context.Context, request api.CreateSecr
 		}), err
 	}
 
-	if !auth.IsNamespaceAllowed(request.Namespace, claims.AllowedNamespaces) || claims.Role == "guest" {
+	if !auth.IsNamespaceAllowed(*request.Body.Namespace, claims.AllowedNamespaces) || claims.Role == "developer" {
 		return BuildCreateSecretErrorResponse(ErrorResult{
 			ErrorMessage: "Access denied: insufficient role or namespace permissions",
 			ErrorCode:    "Forbidden",
@@ -27,16 +26,7 @@ func (h *SecretHandler) CreateSecret(ctx context.Context, request api.CreateSecr
 		}), errors.New("forbidden")
 	}
 
-	secret, err := k8s.ToK8sSecret(request)
-	if err != nil {
-		return BuildCreateSecretErrorResponse(ErrorResult{
-			ErrorMessage: "Error parsing request body",
-			ErrorCode:    "BadRequest",
-			StatusCode:   400,
-		}), err
-	}
-
-	_, err = h.k8sManager.CreateSecret(ctx, secret)
+	err = h.K8sManager.CreateSecretClaim(ctx, request.Body.Name, *request.Body.Namespace, string(request.Body.Type), *request.Body.Data)
 	if err != nil {
 		errorResult := HandleK8sError(err)
 		return BuildCreateSecretErrorResponse(errorResult), err
@@ -49,7 +39,7 @@ func (h *SecretHandler) CreateSecret(ctx context.Context, request api.CreateSecr
 	}, nil
 }
 
-func (h *SecretHandler) ListSecrets(ctx context.Context, request api.ListSecretsParams) (api.ListSecretsResponseObject, error) {
+func (h *SecretHandler) ListSecrets(ctx context.Context, request api.ListSecretsRequestObject) (api.ListSecretsResponseObject, error) {
 	claims, err := auth.GetClaimsFromContext(ctx)
 	if err != nil {
 		return BuildListSecretErrorResponse(ErrorResult{
@@ -58,7 +48,7 @@ func (h *SecretHandler) ListSecrets(ctx context.Context, request api.ListSecrets
 			StatusCode:   500,
 		}), err
 	}
-	if !auth.IsNamespaceAllowed(request.Namespace, claims.AllowedNamespaces) {
+	if !auth.IsNamespaceAllowed(request.Params.Namespace, claims.AllowedNamespaces) {
 		return BuildListSecretErrorResponse(ErrorResult{
 			ErrorMessage: "Access denied: insufficient role or namespace permissions",
 			ErrorCode:    "Forbidden",
@@ -66,15 +56,22 @@ func (h *SecretHandler) ListSecrets(ctx context.Context, request api.ListSecrets
 		}), err
 	}
 
-	listSecrets, err := h.k8sManager.ListSecrets(ctx, request.Namespace)
+	secretClaimList, err := h.K8sManager.ListSecretClaim(ctx, request.Params.Namespace)
 	if err != nil {
 		errorResult := HandleK8sError(err)
 		return BuildListSecretErrorResponse(errorResult), err
 	}
 
-	response := ToSecretListResponse(listSecrets)
+	secretResponses := make([]api.SecretResponse, 0, len(secretClaimList.Items))
 
-	return api.ListSecrets200JSONResponse(*response), err
+	for _, claim := range secretClaimList.Items {
+		response := mapClaimToSecretResponse(&claim)
+		secretResponses = append(secretResponses, response)
+	}
+
+	return api.ListSecrets200JSONResponse{
+		Items: secretResponses,
+	}, err
 }
 
 func (h *SecretHandler) GetSecret(ctx context.Context, request api.GetSecretRequestObject) (api.GetSecretResponseObject, error) {
@@ -95,7 +92,7 @@ func (h *SecretHandler) GetSecret(ctx context.Context, request api.GetSecretRequ
 		}), err
 	}
 
-	secret, err := h.k8sManager.GetSecret(ctx, request)
+	secret, err := h.K8sManager.GetSecretClaim(ctx, request.Name, request.Params.Namespace)
 
 	if err != nil {
 		errorResult := HandleK8sError(err)
@@ -103,12 +100,71 @@ func (h *SecretHandler) GetSecret(ctx context.Context, request api.GetSecretRequ
 	}
 
 	return api.GetSecret200JSONResponse{
-		Data:            MapStrStrPnc(EncodeSecretData(secret.Data)),
-		Name:            &secret.Name,
-		Labels:          &secret.Labels,
-		Namespace:       &secret.Namespace,
-		ResourceVersion: &secret.ResourceVersion,
-		Type:            StrPnc(string(secret.Type)),
+		Data:      MapStrStrPnc(secret.Spec.Data),
+		Name:      secret.Name,
+		Namespace: &secret.Namespace,
+		Type:      string(secret.Spec.Type),
+	}, nil
+
+}
+
+func (h *SecretHandler) UpdateSecret(ctx context.Context, request api.UpdateSecretRequestObject) (api.UpdateSecretResponseObject, error) {
+	claims, err := auth.GetClaimsFromContext(ctx)
+	if err != nil {
+		return BuildUpdateSecretErrorResponse(ErrorResult{
+			ErrorMessage: "Cannot parse request context",
+			ErrorCode:    "InternalServerError",
+			StatusCode:   500,
+		}), err
+	}
+
+	if !auth.IsNamespaceAllowed(request.Params.Namespace, claims.AllowedNamespaces) || claims.Role == "developer" {
+		return BuildUpdateSecretErrorResponse(ErrorResult{
+			ErrorMessage: "Access denied: insufficient role or namespace permissions",
+			ErrorCode:    "Forbidden",
+			StatusCode:   403,
+		}), errors.New("forbidden")
+	}
+
+	updatedSecret, err := h.K8sManager.UpdateSecretClaim(ctx, request.Name, request.Params.Namespace, string(*request.Body.Type), *request.Body.Regenerate, *request.Body.Data)
+	if err != nil {
+		errResult := HandleK8sError(err)
+		return BuildUpdateSecretErrorResponse(errResult), err
+	}
+
+	secretResponse := mapClaimToSecretResponse(updatedSecret)
+
+	return api.UpdateSecret200JSONResponse(secretResponse), nil
+}
+
+func (h *SecretHandler) DeleteSecret(ctx context.Context, request api.DeleteSecretRequestObject) (api.DeleteSecretResponseObject, error) {
+	claims, err := auth.GetClaimsFromContext(ctx)
+	if err != nil {
+		return BuildDeleteSecretErrorResponse(ErrorResult{
+			ErrorMessage: "Cannot parse request context",
+			ErrorCode:    "InternalServerError",
+			StatusCode:   500,
+		}), err
+	}
+
+	if !auth.IsNamespaceAllowed(request.Params.Namespace, claims.AllowedNamespaces) || claims.Role == "developer" {
+		return BuildDeleteSecretErrorResponse(ErrorResult{
+			ErrorMessage: "Access denied: insufficient role or namespace permissions",
+			ErrorCode:    "Forbidden",
+			StatusCode:   403,
+		}), errors.New("forbidden")
+	}
+
+	err = h.K8sManager.DeleteSecretClaim(ctx, request.Name, request.Params.Namespace)
+	if err != nil {
+		errorResult := HandleK8sError(err)
+		return BuildDeleteSecretErrorResponse(errorResult), err
+	}
+
+	return api.DeleteSecret200JSONResponse{
+		OkResponseJSONResponse: api.OkResponseJSONResponse{
+			Ok: BoolPnc(true),
+		},
 	}, nil
 
 }

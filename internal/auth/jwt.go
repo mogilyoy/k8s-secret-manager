@@ -9,6 +9,8 @@ import (
 	"github.com/mogilyoy/k8s-secret-manager/internal/cfg"
 )
 
+var ErrUnauthorizedToken = errors.New("authentication failed: token is invalid or expired")
+
 func GenerateJWT(userID, role string, namespaces []string) (string, error) {
 
 	expirationTime := time.Now().Add(time.Duration(3) * time.Hour)
@@ -47,11 +49,11 @@ func GetClaimsFromToken(tokenString string) (*Claims, error) {
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("token validation failed: %w", err)
+		return nil, fmt.Errorf("%w: %s", ErrUnauthorizedToken, err.Error())
 	}
 
 	if !token.Valid {
-		return nil, errors.New("token is not valid")
+		return nil, ErrUnauthorizedToken
 	}
 
 	return claims, nil

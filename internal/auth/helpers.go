@@ -10,7 +10,6 @@ func GetUserPermissions(userID string) (role string, namespaces []string, err er
 	roleMappings := map[string][]cfg.UserCfg{
 		"admin":     cfg.AppConfig.RoleConfig.Admin,
 		"developer": cfg.AppConfig.RoleConfig.Developer,
-		"guest":     cfg.AppConfig.RoleConfig.Guest,
 	}
 
 	for role, users := range roleMappings {

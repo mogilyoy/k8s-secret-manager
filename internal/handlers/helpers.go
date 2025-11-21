@@ -1,10 +1,8 @@
 package handlers
 
 import (
-	"encoding/base64"
-
+	secretsv1alpha1 "github.com/mogilyoy/k8s-secret-manager/api/v1alpha1"
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
-	corev1 "k8s.io/api/core/v1"
 )
 
 func StrPnc(v string) *string {
@@ -23,49 +21,25 @@ func MapStrStrPnc(v map[string]string) *map[string]string {
 	return &v
 }
 
-func EncodeSecretData(data map[string][]byte) map[string]string {
-	outputData := make(map[string]string)
+func mapClaimToSecretResponse(claim *secretsv1alpha1.SecretClaim) api.SecretResponse {
+	externalStatus := "Pending"
+	var errorMessage *string = nil
 
-	for key, bytesArray := range data {
-		encodedBytes := base64.StdEncoding.EncodeToString(bytesArray)
-		outputData[key] = encodedBytes
-	}
-	return outputData
-}
-
-func ToSecretListResponse(k8sList *corev1.SecretList) *api.ListSecretsResponse {
-
-	if k8sList == nil || len(k8sList.Items) == 0 {
-
-		emptyItems := make([]api.SecretSummary, 0)
-		return &api.ListSecretsResponse{
-			Items: &emptyItems,
-
-			Namespace: StrPnc(k8sList.ResourceVersion),
-		}
+	if claim.Status.ErrorMessage != "" {
+		externalStatus = "Error"
+		errorMessage = &claim.Status.ErrorMessage
+	} else if claim.Status.Synced {
+		externalStatus = "Ready"
 	}
 
-	summaries := make([]api.SecretSummary, 0, len(k8sList.Items))
+	var emptyData *map[string]string = nil
 
-	for _, item := range k8sList.Items {
-
-		summary := api.SecretSummary{
-
-			CreationTimestamp: &item.ObjectMeta.CreationTimestamp.Time,
-
-			Name: StrPnc(item.Name),
-
-			Type: StrPnc(string(item.Type)),
-		}
-
-		summaries = append(summaries, summary)
-	}
-
-	namespace := k8sList.Items[0].Namespace
-
-	return &api.ListSecretsResponse{
-
-		Items:     &summaries,
-		Namespace: StrPnc(namespace),
+	return api.SecretResponse{
+		Name:         claim.Name,
+		Namespace:    &claim.Namespace,
+		Type:         string(claim.Spec.Type),
+		Status:       api.SecretResponseStatus(externalStatus),
+		ErrorMessage: errorMessage,
+		Data:         emptyData,
 	}
 }
