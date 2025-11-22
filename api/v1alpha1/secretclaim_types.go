@@ -70,6 +70,8 @@ type SecretClaimStatus struct {
 	ErrorMessage string `json:"errorMessage,omitempty"`
 
 	LastUpdate *metav1.Time `json:"lastUpdate,omitempty"`
+
+	LastReconcileTrigger string `json:"lastReconcileTrigger,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -79,11 +81,11 @@ type SecretClaimStatus struct {
 type SecretClaim struct {
 	metav1.TypeMeta `json:",inline"`
 
-	metav1.ObjectMeta `json:"metadata,omitzero"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
 	Spec SecretClaimSpec `json:"spec"`
 
-	Status SecretClaimStatus `json:"status,omitzero"`
+	Status SecretClaimStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true

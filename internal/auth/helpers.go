@@ -1,27 +1,6 @@
 package auth
 
-import (
-	"fmt"
-
-	"github.com/mogilyoy/k8s-secret-manager/internal/cfg"
-)
-
-func GetUserPermissions(userID string) (role string, namespaces []string, err error) {
-	roleMappings := map[string][]cfg.UserCfg{
-		"admin":     cfg.AppConfig.RoleConfig.Admin,
-		"developer": cfg.AppConfig.RoleConfig.Developer,
-	}
-
-	for role, users := range roleMappings {
-		for _, user := range users {
-			if user.ID == userID {
-				return role, user.AllowedNamespaces, nil
-			}
-
-		}
-	}
-	return "", nil, fmt.Errorf("user not found in config")
-}
+import "golang.org/x/crypto/bcrypt"
 
 func IsNamespaceAllowed(requestedNamespace string, allowedNamespaces []string) bool {
 	for _, allowed := range allowedNamespaces {
@@ -37,4 +16,9 @@ func IsNamespaceAllowed(requestedNamespace string, allowedNamespaces []string) b
 		}
 	}
 	return false
+}
+
+func CheckPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
 }

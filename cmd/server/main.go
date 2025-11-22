@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
-	"github.com/mogilyoy/k8s-secret-manager/internal/auth"
+	"github.com/mogilyoy/k8s-secret-manager/internal/cfg"
 	"github.com/mogilyoy/k8s-secret-manager/internal/handlers"
 	"github.com/mogilyoy/k8s-secret-manager/internal/k8s"
 )
@@ -27,10 +27,14 @@ func main() {
 	log.Println("✅ Kubernetes Client (controller-runtime) initialized successfully.")
 
 	// 2. Инициализация Сервисов
-	authService := auth.NewAuthService()
+	cfg, err := cfg.LoadConfig("config.yaml")
+
+	if err != nil {
+		panic(err)
+	}
 
 	// 3. Инициализация Хэндлеров
-	secretHandler := handlers.NewSecretHandler(k8sManager, authService)
+	secretHandler := handlers.NewSecretHandler(k8sManager, *cfg)
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logger)

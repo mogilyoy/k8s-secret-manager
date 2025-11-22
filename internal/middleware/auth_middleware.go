@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/mogilyoy/k8s-secret-manager/internal/auth"
 )
@@ -11,8 +12,12 @@ import (
 func JWTAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
+		if token == "" || !strings.HasPrefix(token, "Bearer ") {
+			sendErrorResponse(w, http.StatusUnauthorized, "Unauthorized", "Missing or invalid Authorization header.")
+			return
+		}
 
-		claims, err := auth.GetClaimsFromToken(token)
+		claims, err := GetClaimsFromToken(token)
 
 		if err != nil {
 			if errors.Is(err, auth.ErrUnauthorizedToken) {

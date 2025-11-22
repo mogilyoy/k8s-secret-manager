@@ -1,11 +1,19 @@
 
 
-admin:
+users:
   - id: "356366758"
+    username: admin
+    pwd: $2a$10$0teWtw1zeBS.SY5ytsKdyeQVtVvz8w54e8Px01cI6359FQtBWratK  # Admin
+    role: admin
     allowed_namespaces: ["*"] 
-developer:
   - id: "987654321"
+    username: dev1
+    pwd: $2a$10$O9XIt8mkEOXbrvMEl1m3P.RdW2aTEZHBVOaKhG3OPj82OOA7qFPl2  # SpellCasting
+    role: developer
     allowed_namespaces: ["dev-one", "staging"]
   - id: "235634656"
+    username: dev2
+    pwd: $2a$10$eNu1N/whZhZm2IOOPlSyi.uTWNPlI15l6khRvcJqsgVltIZ0ztcay  # Yeeeeet1917 
+    role: developer
     allowed_namespaces: ["dev-two"]
   

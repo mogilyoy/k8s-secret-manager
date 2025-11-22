@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -11,50 +10,22 @@ import (
 
 var ErrUnauthorizedToken = errors.New("authentication failed: token is invalid or expired")
 
-func GenerateJWT(userID, role string, namespaces []string) (string, error) {
+func GenerateJWT(user *cfg.User, expiresIn int64, JWTSecret string) (string, error) {
+	now := time.Now()
+	expirationTime := time.Now().Add(time.Duration(expiresIn) * time.Second)
 
-	expirationTime := time.Now().Add(time.Duration(3) * time.Hour)
+	claims := Claims{
+		Username:          user.Username,
+		Role:              user.Role,
+		AllowedNamespaces: user.AllowedNamespaces,
 
-	claims := &Claims{
-		TelegramUserID:    userID,
-		Role:              role,
-		AllowedNamespaces: namespaces,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			IssuedAt:  jwt.NewNumericDate(now),
+			Subject:   user.ID,
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	tokenString, err := token.SignedString(cfg.AppConfig.AuthConfig.JWTSecret)
-	if err != nil {
-		return "", fmt.Errorf("could not sign token: %w", err)
-	}
-	return tokenString, nil
-}
-
-func GetClaimsFromToken(tokenString string) (*Claims, error) {
-	claims := &Claims{}
-
-	token, err := jwt.ParseWithClaims(
-		tokenString,
-		claims,
-		func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return cfg.AppConfig.AuthConfig.JWTSecret, nil
-		},
-	)
-
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrUnauthorizedToken, err.Error())
-	}
-
-	if !token.Valid {
-		return nil, ErrUnauthorizedToken
-	}
-
-	return claims, nil
+	return token.SignedString([]byte(JWTSecret))
 }

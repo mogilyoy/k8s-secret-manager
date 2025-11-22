@@ -84,7 +84,7 @@ func BuildCreateSecretErrorResponse(res ErrorResult) api.CreateSecretResponseObj
 		return api.CreateSecret500JSONResponse{InternalJSONResponse: commonBody}
 	}
 }
-func BuildListSecretErrorResponse(res ErrorResult) api.ListSecretsResponseObject {
+func BuildListSecretsErrorResponse(res ErrorResult) api.ListSecretsResponseObject {
 	commonBody := getCommonBody(res)
 	switch res.StatusCode {
 	case 400:
@@ -137,5 +137,17 @@ func BuildDeleteSecretErrorResponse(res ErrorResult) api.DeleteSecretResponseObj
 		return api.DeleteSecret404JSONResponse{NotFoundJSONResponse: api.NotFoundJSONResponse(commonBody)}
 	default:
 		return api.DeleteSecret500JSONResponse{InternalJSONResponse: commonBody}
+	}
+}
+
+func BuildAuthErrorResponse(res ErrorResult) api.AuthUserResponseObject {
+	commonBody := getCommonBody(res)
+	switch res.StatusCode {
+	case 400:
+		return api.AuthUser400JSONResponse{BadRequestJSONResponse: api.BadRequestJSONResponse(commonBody)}
+	case 401:
+		return api.AuthUser401JSONResponse{UnauthorizedJSONResponse: api.UnauthorizedJSONResponse(commonBody)}
+	default:
+		return api.AuthUser500JSONResponse{InternalJSONResponse: commonBody}
 	}
 }

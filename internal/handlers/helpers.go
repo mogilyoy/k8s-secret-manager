@@ -21,7 +21,7 @@ func MapStrStrPnc(v map[string]string) *map[string]string {
 	return &v
 }
 
-func mapClaimToSecretResponse(claim *secretsv1alpha1.SecretClaim) api.SecretResponse {
+func mapClaimToSecretResponse(claim *secretsv1alpha1.SecretClaim, data map[string]string) api.SecretResponse {
 	externalStatus := "Pending"
 	var errorMessage *string = nil
 
@@ -32,7 +32,12 @@ func mapClaimToSecretResponse(claim *secretsv1alpha1.SecretClaim) api.SecretResp
 		externalStatus = "Ready"
 	}
 
-	var emptyData *map[string]string = nil
+	var responseData *map[string]string = nil
+
+	// Если данные передали (не nil) — берем адрес
+	if data != nil {
+		responseData = &data
+	}
 
 	return api.SecretResponse{
 		Name:         claim.Name,
@@ -40,6 +45,6 @@ func mapClaimToSecretResponse(claim *secretsv1alpha1.SecretClaim) api.SecretResp
 		Type:         string(claim.Spec.Type),
 		Status:       api.SecretResponseStatus(externalStatus),
 		ErrorMessage: errorMessage,
-		Data:         emptyData,
+		Data:         responseData,
 	}
 }

@@ -7,58 +7,45 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type UserCfg struct {
+type Config struct {
+	Users []User `yaml:"users"`
+
+	JWT JWTConfig `yaml:"jwt"`
+}
+
+type User struct {
 	ID                string   `yaml:"id"`
+	Username          string   `yaml:"username"`
+	PasswordHash      string   `yaml:"pwd"`
+	Role              string   `yaml:"role"`
 	AllowedNamespaces []string `yaml:"allowed_namespaces"`
 }
 
-type UserRolesConfig struct {
-	Admin     []UserCfg `yaml:"admin"`
-	Developer []UserCfg `yaml:"developer"`
-}
-
-type Auth struct {
-	TelegramBotToken string
-	JWTSecret        string
-}
-
-type Config struct {
-	RoleConfig UserRolesConfig
-	AuthConfig Auth
+type JWTConfig struct {
+	Secret string `yaml:"secret"`
 }
 
 var AppConfig Config
 
 func LoadConfig(configPath string) (*Config, error) {
-	fileContent, err := os.ReadFile(configPath)
-
+	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading configPath: %w", err)
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
-	var userRolesCfg UserRolesConfig
-	if err := yaml.Unmarshal(fileContent, &userRolesCfg); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal YAML into struct: %w", err)
+	if err := yaml.Unmarshal(data, &AppConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
-
-	telegramToken := os.Getenv("TELEGRAM_TOKEN")
-	if telegramToken == "" {
-		return nil, fmt.Errorf("required environment variable TELEGRAM_TOKEN is not set")
+	if envSecret := os.Getenv("JWT_SECRET"); envSecret != "" {
+		AppConfig.JWT.Secret = envSecret
 	}
-
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		return nil, fmt.Errorf("required environment variable JWT_SECRET is not set")
-	}
-
-	authCfg := Auth{
-		TelegramBotToken: telegramToken,
-		JWTSecret:        jwtSecret,
-	}
-
-	AppConfig = Config{
-		RoleConfig: userRolesCfg,
-		AuthConfig: authCfg,
-	}
-
 	return &AppConfig, nil
+}
+
+func (c *Config) FindUser(username string) *User {
+	for _, u := range c.Users {
+		if u.Username == username {
+			return &u
+		}
+	}
+	return nil
 }

@@ -13,6 +13,7 @@ import (
 type SecretClaimsInterface interface {
 	CreateSecretClaim(ctx context.Context, name, namespace, claimType string, data map[string]string) error
 	GetSecretClaim(ctx context.Context, name, namespace string) (*secretsv1alpha1.SecretClaim, error)
+	GetActualSecretData(ctx context.Context, name, namespace string) (map[string]string, error)
 	ListSecretClaim(ctx context.Context, namespace string) (*secretsv1alpha1.SecretClaimList, error)
 	UpdateSecretClaim(ctx context.Context, name, namespace, claimType string, regenerate bool, data map[string]string) (*secretsv1alpha1.SecretClaim, error)
 	DeleteSecretClaim(ctx context.Context, name, namespace string) error
@@ -26,7 +27,6 @@ func NewK8sSecretManager() (*K8sDynamicClient, error) {
 
 	scheme := runtime.NewScheme()
 
-	// Регистрируем наши типы (SecretClaim) в схеме
 	if err := secretsv1alpha1.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("failed to add scheme: %w", err)
 	}
