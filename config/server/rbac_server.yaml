@@ -1,0 +1,37 @@
+# 1. ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: secret-api-server-sa
+  namespace: default
+---
+# 2. Role (Определение разрешений)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-api-server-role
+  namespace: default
+rules:
+# Полное управление ресурсами SecretClaim
+- apiGroups: ["secrets.myapp.io"]
+  resources: ["secretclaims"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+# Read-Only доступ к обычным Secret
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]
+---
+# 3. RoleBinding (Привязка прав к ServiceAccount)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: secret-api-server-rb
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: secret-api-server-role
+subjects:
+- kind: ServiceAccount
+  name: secret-api-server-sa
+  namespace: default

@@ -1,0 +1,60 @@
+# Deployment для REST API сервера
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secret-api-server
+  labels:
+    app: secret-api-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secret-api-server
+  template:
+    metadata:
+      labels:
+        app: secret-api-server
+    spec:
+      # Используем ServiceAccount, созданный выше, для получения RBAC прав
+      serviceAccountName: secret-api-server-sa
+      containers:
+      - name: api-server
+        image: secret-manager:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+          name: http
+        
+        command: ["/server"] 
+        args:
+        - "--port=8080" 
+        
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65532 
+          capabilities:
+            drop:
+            - ALL
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: secret-api-service
+spec:
+  selector:
+    app: secret-api-server
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: LoadBalancer

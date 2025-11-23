@@ -106,11 +106,11 @@ lint-config: golangci-lint ## Verify golangci-lint linter configuration
 
 .PHONY: build
 build: manifests generate fmt vet ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+	go build -o bin/manager cmd/controller/main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run ./cmd/controller/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
@@ -167,9 +167,24 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
 
+.PHONY: deploy-server
+deploy-server: manifests kustomize ## Deploy the REST API server to the K8s cluster.
+	@echo "Deploying REST API Server..."
+	mkdir -p config/server/temp
+	cp config/server/deployment_server.yaml config/server/rbac_server.yaml config/server/temp/
+	echo "apiVersion: kustomize.config.k8s.io/v1beta1" > config/server/temp/kustomization.yaml
+	echo "kind: Kustomization" >> config/server/temp/kustomization.yaml
+	echo "resources:" >> config/server/temp/kustomization.yaml
+	echo "- deployment_server.yaml" >> config/server/temp/kustomization.yaml
+	echo "- rbac_server.yaml" >> config/server/temp/kustomization.yaml
+	cd config/server/temp && "$(KUSTOMIZE)" edit set image secret-manager:latest=${IMG}
+	"$(KUSTOMIZE)" build config/server/temp | "$(KUBECTL)" apply -f -
+	rm -rf config/server/temp
+
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -
+	"$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f config/server/deployment_server.yaml config/server/rbac_server.yaml
 
 ##@ Dependencies
 

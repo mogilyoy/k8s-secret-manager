@@ -118,6 +118,9 @@ type ErrorUnauthorized struct {
 
 // GenerationConfig Secret generation settings
 type GenerationConfig struct {
+	// DataKeys List of keys to generate in the secret
+	DataKeys *[]string `json:"data-keys,omitempty"`
+
 	// Encoding Encoding type 'base64', 'hex', 'alphanumeric'
 	Encoding *string `json:"encoding,omitempty"`
 

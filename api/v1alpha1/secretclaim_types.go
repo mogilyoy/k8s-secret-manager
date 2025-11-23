@@ -43,6 +43,8 @@ type GenerationConfig struct {
 	Encoding string `json:"encoding,omitempty"` //  "hex", "base64", "alphanumeric"
 
 	ReconcileTrigger string `json:"reconcileTrigger,omitempty"`
+
+	DataKeys []string `json:"dataKeys,omitempty"` // ключи для сгенерированных данных
 }
 
 // SecretClaimStatus defines the observed state of SecretClaim.

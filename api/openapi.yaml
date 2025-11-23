@@ -211,7 +211,7 @@ paths:
             
       responses:
         '200':
-          description: Успешная аутентификация.
+          description: Success
           content:
             application/json:
               schema:
@@ -320,6 +320,11 @@ components:
           type: string
           description: Encoding type 'base64', 'hex', 'alphanumeric'
           default: alphanumeric
+        data-keys:
+          type: array
+          description: List of keys to generate in the secret
+          items:
+            type: string
 
     CreateSecretRequest:
       type: object

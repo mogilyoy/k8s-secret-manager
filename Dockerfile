@@ -1,31 +1,33 @@
-# Build the manager binary
+# Build the manager and server binary
 FROM golang:1.24 AS builder
-ARG TARGETOS
-ARG TARGETARCH
 
 WORKDIR /workspace
-# Copy the Go Modules manifests
-COPY go.mod go.mod
-COPY go.sum go.sum
-# cache deps before building and copying source so that we don't need to re-download as much
-# and so that source changes don't invalidate our downloaded layer
+
+# Copy go mod and sum files
+COPY go.mod go.sum ./
+# Download all dependencies. Dependencies will be cached if the go.mod and go.sum files are unchanged
 RUN go mod download
 
-# Copy the Go source (relies on .dockerignore to filter)
+# Copy the source code
 COPY . .
 
-# Build
-# the GOARCH has no default value to allow the binary to be built according to the host where the command
-# was called. For example, if we call make docker-build in a local env which has the Apple Silicon M1 SO
-# the docker BUILDPLATFORM arg will be linux/arm64 when for Apple x86 it will be linux/amd64. Therefore,
-# by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
+# Build the manager (Controller) binary
+# Ensure CGO is disabled for static linked binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o manager cmd/controller/main.go
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
+# Build the server (REST API) binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o server cmd/server/main.go
+
+# Final stage: Use a minimal base image
 FROM gcr.io/distroless/static:nonroot
-WORKDIR /
-COPY --from=builder /workspace/manager .
-USER 65532:65532
 
+# Copy the license file from the build stage (best practice)
+# COPY --from=builder /workspace/hack/boilerplate.go.txt /licenses/
+
+# Copy the built binaries
+COPY --from=builder /workspace/manager /manager
+COPY --from=builder /workspace/server /server
+
+# Set the entrypoint to the controller (default for kubebuilder deployment)
+USER 65532:65532
 ENTRYPOINT ["/manager"]
