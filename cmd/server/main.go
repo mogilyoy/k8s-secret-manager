@@ -1,8 +1,10 @@
 package main
 
 import (
-	"log"
+	"context"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -11,58 +13,80 @@ import (
 	"github.com/mogilyoy/k8s-secret-manager/internal/cfg"
 	"github.com/mogilyoy/k8s-secret-manager/internal/handlers"
 	"github.com/mogilyoy/k8s-secret-manager/internal/k8s"
-)
-
-const (
-	// PORT - порт, на котором слушает REST API
-	PORT = ":8080"
+	authMiddleware "github.com/mogilyoy/k8s-secret-manager/internal/middleware"
+	"github.com/mogilyoy/k8s-secret-manager/internal/observability"
 )
 
 func main() {
 
-	k8sManager, err := k8s.NewK8sSecretManager()
+	tp := observability.InitTracer()
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			slog.Error("❌ Error shutting down tracer provider: %v", slog.Any("error", err))
+		}
+	}()
+
+	slog.Info("✅ OpenTelemetry Tracer Provider initialized.")
+
+	logger := observability.NewContextualLogger(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})
+
+	slog.SetDefault(logger)
+
+	config, err := cfg.LoadConfig()
 	if err != nil {
-		log.Fatalf("❌ FATAL: Failed to initialize Kubernetes manager: %v", err)
+		slog.Error("❌ FATAL: Failed to load config: %v", slog.Any("error", err))
+		os.Exit(1)
 	}
-	log.Println("✅ Kubernetes Client (controller-runtime) initialized successfully.")
+	if config.JWT.Secret == "" {
+		slog.Error("❌ FATAL: JWT secret is empty. Set via config.yaml or JWT_SECRET environment variable.")
+		os.Exit(1)
+	}
+	slog.Info("✅ Configuration loaded successfully.")
 
-	// 2. Инициализация Сервисов
-	cfg, err := cfg.LoadConfig("config.yaml")
-
+	k8sManager, err := k8s.NewK8sSecretManager(logger, tp)
 	if err != nil {
-		panic(err)
+		slog.Error("❌ FATAL: Failed to initialize Kubernetes manager: %v", slog.Any("error", err))
 	}
+	slog.Info("✅ Kubernetes Client initialized successfully.")
 
-	// 3. Инициализация Хэндлеров
-	secretHandler := handlers.NewSecretHandler(k8sManager, *cfg)
+	tracer := tp.Tracer(cfg.AppConfig.Service.Name)
+	secretHandler := handlers.NewSecretHandler(k8sManager, *config, logger, tracer)
 
 	router := chi.NewRouter()
-	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
+	router.Use(middleware.RequestID)
+	router.Use(observability.NewOTelMiddleware(cfg.AppConfig.Service.Name))
+	router.Use(observability.NewSlogMiddleware(logger))
+	router.Use(observability.SlogRequestLogger())
 
-	// 4a. Создаем StrictServerInterface, обернутый в HTTP-адаптер
-	// secretHandler - это ваша реализация StrictServerInterface.
-	// Мы передаем пустой слайс мидлваров, если не используем их.
-	strictServer := api.NewStrictHandler(
-		secretHandler, // <-- Ваш реализатор интерфейса
-		nil,           // <-- Мидлвары StrictServer (можно добавить аутентификацию)
-	)
+	strictServer := api.NewStrictHandler(secretHandler, nil)
 
-	// 4b. Используем сгенерированный Chi-адаптер для подключения к роутеру
-	// Эта функция (HandlerFromMux) берет сгенерированный адаптер и регистрирует все роуты Chi.
-	// Она сама знает, как преобразовать вызов из http.ResponseWriter в сигнатуру Go-интерфейса.
-	apiRouter := api.HandlerFromMux(strictServer, router)
-	// 5. Запуск Сервера
+	baseAPIMux := chi.NewMux()
+	api.HandlerFromMux(strictServer, baseAPIMux)
+
+	router.Post("/user/auth", func(w http.ResponseWriter, r *http.Request) {
+		baseAPIMux.ServeHTTP(w, r)
+	})
+
+	router.Group(func(r chi.Router) {
+		jwtMiddlewareFunc := authMiddleware.JWTAuthMiddleware(config.JWT.Secret)
+		r.Use(jwtMiddlewareFunc)
+		r.Mount("/", baseAPIMux)
+	})
+
+	// 7. Запуск сервера
 	srv := &http.Server{
-		Addr:         PORT,
-		Handler:      apiRouter,
+		Addr:         cfg.AppConfig.Service.Port,
+		Handler:      router,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 
-	log.Printf("🚀 Starting REST API server on %s", PORT)
+	slog.Info("🚀 Starting REST API server on %s", slog.String("port", cfg.AppConfig.Service.Port))
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("❌ Could not listen on %s: %v", PORT, err)
+		slog.Error("❌ Could not listen on %s: %v", slog.Any("port", cfg.AppConfig.Service.Port), slog.Any("error", err))
 	}
 }

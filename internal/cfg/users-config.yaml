@@ -1,4 +1,12 @@
 
+jwt:
+  secret: default-dev-secret-change-me
+
+service: 
+  name: k8s-secret-manager
+  version: 1.0.0
+  port: :8080
+
 
 users:
   - id: "356366758"

@@ -24,6 +24,13 @@ const (
 	CreateSecretRequestTypeOpaque        CreateSecretRequestType = "Opaque"
 )
 
+// Defines values for GenerationConfigEncoding.
+const (
+	Alphanumeric GenerationConfigEncoding = "alphanumeric"
+	Digits       GenerationConfigEncoding = "digits"
+	Symbols      GenerationConfigEncoding = "symbols"
+)
+
 // Defines values for SecretResponseStatus.
 const (
 	SecretResponseStatusError    SecretResponseStatus = "Error"
@@ -121,12 +128,15 @@ type GenerationConfig struct {
 	// DataKeys List of keys to generate in the secret
 	DataKeys *[]string `json:"data-keys,omitempty"`
 
-	// Encoding Encoding type 'base64', 'hex', 'alphanumeric'
-	Encoding *string `json:"encoding,omitempty"`
+	// Encoding password type
+	Encoding *GenerationConfigEncoding `json:"encoding,omitempty"`
 
 	// Length Generated secret len
 	Length int32 `json:"length"`
 }
+
+// GenerationConfigEncoding password type
+type GenerationConfigEncoding string
 
 // ListSecretsResponse All SecretClaims in the Namespace
 type ListSecretsResponse struct {
@@ -186,6 +196,9 @@ type Namespace = string
 // ResourceName defines model for ResourceName.
 type ResourceName = string
 
+// XRequestID defines model for XRequestID.
+type XRequestID = string
+
 // BadRequest defines model for BadRequest.
 type BadRequest = ErrorBadRequest
 
@@ -207,21 +220,45 @@ type Unauthorized = ErrorUnauthorized
 // ListSecretsParams defines parameters for ListSecrets.
 type ListSecretsParams struct {
 	Namespace Namespace `form:"namespace" json:"namespace"`
+
+	// XRequestID Correlation ID for tracing
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+}
+
+// CreateSecretParams defines parameters for CreateSecret.
+type CreateSecretParams struct {
+	// XRequestID Correlation ID for tracing
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
 }
 
 // DeleteSecretParams defines parameters for DeleteSecret.
 type DeleteSecretParams struct {
 	Namespace Namespace `form:"namespace" json:"namespace"`
+
+	// XRequestID Correlation ID for tracing
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
 }
 
 // GetSecretParams defines parameters for GetSecret.
 type GetSecretParams struct {
 	Namespace Namespace `form:"namespace" json:"namespace"`
+
+	// XRequestID Correlation ID for tracing
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
 }
 
 // UpdateSecretParams defines parameters for UpdateSecret.
 type UpdateSecretParams struct {
 	Namespace Namespace `form:"namespace" json:"namespace"`
+
+	// XRequestID Correlation ID for tracing
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
+}
+
+// AuthUserParams defines parameters for AuthUser.
+type AuthUserParams struct {
+	// XRequestID Correlation ID for tracing
+	XRequestID *XRequestID `json:"X-Request-ID,omitempty"`
 }
 
 // CreateSecretJSONRequestBody defines body for CreateSecret for application/json ContentType.
@@ -238,9 +275,9 @@ type ServerInterface interface {
 	// List available secrets
 	// (GET /secrets)
 	ListSecrets(w http.ResponseWriter, r *http.Request, params ListSecretsParams)
-	// Create a scret
+	// Create a secret
 	// (POST /secrets)
-	CreateSecret(w http.ResponseWriter, r *http.Request)
+	CreateSecret(w http.ResponseWriter, r *http.Request, params CreateSecretParams)
 	// Delete secret
 	// (DELETE /secrets/{name})
 	DeleteSecret(w http.ResponseWriter, r *http.Request, name ResourceName, params DeleteSecretParams)
@@ -252,7 +289,7 @@ type ServerInterface interface {
 	UpdateSecret(w http.ResponseWriter, r *http.Request, name ResourceName, params UpdateSecretParams)
 	// Exchange Auth Data for JWT
 	// (POST /user/auth)
-	AuthUser(w http.ResponseWriter, r *http.Request)
+	AuthUser(w http.ResponseWriter, r *http.Request, params AuthUserParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -265,9 +302,9 @@ func (_ Unimplemented) ListSecrets(w http.ResponseWriter, r *http.Request, param
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Create a scret
+// Create a secret
 // (POST /secrets)
-func (_ Unimplemented) CreateSecret(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) CreateSecret(w http.ResponseWriter, r *http.Request, params CreateSecretParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -291,7 +328,7 @@ func (_ Unimplemented) UpdateSecret(w http.ResponseWriter, r *http.Request, name
 
 // Exchange Auth Data for JWT
 // (POST /user/auth)
-func (_ Unimplemented) AuthUser(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) AuthUser(w http.ResponseWriter, r *http.Request, params AuthUserParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -333,6 +370,27 @@ func (siw *ServerInterfaceWrapper) ListSecrets(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListSecrets(w, r, params)
 	}))
@@ -347,14 +405,40 @@ func (siw *ServerInterfaceWrapper) ListSecrets(w http.ResponseWriter, r *http.Re
 // CreateSecret operation middleware
 func (siw *ServerInterfaceWrapper) CreateSecret(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
 	ctx := r.Context()
 
 	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateSecretParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateSecret(w, r)
+		siw.Handler.CreateSecret(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -400,6 +484,27 @@ func (siw *ServerInterfaceWrapper) DeleteSecret(w http.ResponseWriter, r *http.R
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "namespace", Err: err})
 		return
+	}
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -451,6 +556,27 @@ func (siw *ServerInterfaceWrapper) GetSecret(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetSecret(w, r, name, params)
 	}))
@@ -500,6 +626,27 @@ func (siw *ServerInterfaceWrapper) UpdateSecret(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateSecret(w, r, name, params)
 	}))
@@ -514,14 +661,40 @@ func (siw *ServerInterfaceWrapper) UpdateSecret(w http.ResponseWriter, r *http.R
 // AuthUser operation middleware
 func (siw *ServerInterfaceWrapper) AuthUser(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
 	ctx := r.Context()
 
 	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
 
 	r = r.WithContext(ctx)
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AuthUserParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "X-Request-ID" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Request-ID")]; found {
+		var XRequestID XRequestID
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Request-ID", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Request-ID", valueList[0], &XRequestID, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Request-ID", Err: err})
+			return
+		}
+
+		params.XRequestID = &XRequestID
+
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AuthUser(w, r)
+		siw.Handler.AuthUser(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -743,7 +916,8 @@ func (response ListSecrets500JSONResponse) VisitListSecretsResponse(w http.Respo
 }
 
 type CreateSecretRequestObject struct {
-	Body *CreateSecretJSONRequestBody
+	Params CreateSecretParams
+	Body   *CreateSecretJSONRequestBody
 }
 
 type CreateSecretResponseObject interface {
@@ -1004,7 +1178,8 @@ func (response UpdateSecret500JSONResponse) VisitUpdateSecretResponse(w http.Res
 }
 
 type AuthUserRequestObject struct {
-	Body *AuthUserJSONRequestBody
+	Params AuthUserParams
+	Body   *AuthUserJSONRequestBody
 }
 
 type AuthUserResponseObject interface {
@@ -1052,7 +1227,7 @@ type StrictServerInterface interface {
 	// List available secrets
 	// (GET /secrets)
 	ListSecrets(ctx context.Context, request ListSecretsRequestObject) (ListSecretsResponseObject, error)
-	// Create a scret
+	// Create a secret
 	// (POST /secrets)
 	CreateSecret(ctx context.Context, request CreateSecretRequestObject) (CreateSecretResponseObject, error)
 	// Delete secret
@@ -1125,8 +1300,10 @@ func (sh *strictHandler) ListSecrets(w http.ResponseWriter, r *http.Request, par
 }
 
 // CreateSecret operation middleware
-func (sh *strictHandler) CreateSecret(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) CreateSecret(w http.ResponseWriter, r *http.Request, params CreateSecretParams) {
 	var request CreateSecretRequestObject
+
+	request.Params = params
 
 	var body CreateSecretJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -1244,8 +1421,10 @@ func (sh *strictHandler) UpdateSecret(w http.ResponseWriter, r *http.Request, na
 }
 
 // AuthUser operation middleware
-func (sh *strictHandler) AuthUser(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) AuthUser(w http.ResponseWriter, r *http.Request, params AuthUserParams) {
 	var request AuthUserRequestObject
+
+	request.Params = params
 
 	var body AuthUserJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

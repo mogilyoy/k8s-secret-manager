@@ -1,11 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
+	"github.com/mogilyoy/k8s-secret-manager/internal/observability"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -15,7 +20,12 @@ type ErrorResult struct {
 	ErrorMessage string
 }
 
-func HandleK8sError(err error) ErrorResult {
+func HandleK8sError(ctx context.Context, err error) ErrorResult {
+	span := trace.SpanFromContext(ctx)
+	logger := observability.LoggerFromContext(ctx)
+
+	span.RecordError(err)
+
 	var statusError *k8serrors.StatusError
 
 	if errors.As(err, &statusError) {
@@ -25,6 +35,8 @@ func HandleK8sError(err error) ErrorResult {
 
 		switch status {
 		case http.StatusForbidden: // 403
+			span.SetStatus(codes.Error, "K8s API: Forbidden")
+			logger.Warn("K8s API Access Denied (403)", slog.Any("k8s_status", status), slog.Any("k8s_message", k8sMessage), slog.Any("error", err.Error()))
 			return ErrorResult{
 				StatusCode:   status,
 				ErrorCode:    "Forbidden",
@@ -32,6 +44,8 @@ func HandleK8sError(err error) ErrorResult {
 			}
 
 		case http.StatusConflict: // 409
+			span.SetStatus(codes.Error, "K8s API: Conflict")
+			logger.Warn("K8s API Resource Conflict (409)", slog.Any("k8s_status", status), slog.Any("k8s_message", k8sMessage), slog.Any("error", err.Error()))
 			return ErrorResult{
 				StatusCode:   status,
 				ErrorCode:    "Conflict",
@@ -39,6 +53,8 @@ func HandleK8sError(err error) ErrorResult {
 			}
 
 		case http.StatusNotFound: // 404
+			span.SetStatus(codes.Error, "K8s API: Not Found")
+			logger.Warn("K8s API Resource Not Found (404)", slog.Any("k8s_status", status), slog.Any("k8s_message", k8sMessage), slog.Any("error", err.Error()))
 			return ErrorResult{
 				StatusCode:   status,
 				ErrorCode:    "NotFound",
@@ -46,6 +62,8 @@ func HandleK8sError(err error) ErrorResult {
 			}
 
 		default:
+			span.SetStatus(codes.Error, "K8s API: Unexpected Error")
+			logger.Error("K8s API Unexpected Error", slog.Any("k8s_status", status), slog.Any("k8s_message", k8sMessage), slog.Any("error", err.Error()))
 			return ErrorResult{
 				StatusCode:   http.StatusInternalServerError,
 				ErrorCode:    "KubernetesAPIError",
@@ -53,6 +71,8 @@ func HandleK8sError(err error) ErrorResult {
 			}
 		}
 	}
+	span.SetStatus(codes.Error, "Internal K8s communication error")
+	logger.Error("Internal error communicating with K8s", slog.Any("error", err))
 
 	return ErrorResult{
 		StatusCode:   http.StatusInternalServerError,

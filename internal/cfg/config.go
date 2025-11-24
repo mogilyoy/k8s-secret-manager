@@ -11,6 +11,14 @@ type Config struct {
 	Users []User `yaml:"users"`
 
 	JWT JWTConfig `yaml:"jwt"`
+
+	Service ServiceConfig `yaml:"service"`
+}
+
+type ServiceConfig struct {
+	Name    string `yaml:"name"`
+	Version string `yaml:"version"`
+	Port    string `yaml:"port"`
 }
 
 type User struct {
@@ -27,8 +35,8 @@ type JWTConfig struct {
 
 var AppConfig Config
 
-func LoadConfig(configPath string) (*Config, error) {
-	data, err := os.ReadFile(configPath)
+func LoadConfig() (*Config, error) {
+	data, err := os.ReadFile("internal/cfg/users-config.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}

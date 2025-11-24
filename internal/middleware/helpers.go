@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/mogilyoy/k8s-secret-manager/internal/auth"
-	"github.com/mogilyoy/k8s-secret-manager/internal/cfg"
 )
 
 func StrPnc(v string) *string {
@@ -16,8 +16,10 @@ func IntPnc(v int) *int {
 	return &v
 }
 
-func GetClaimsFromToken(tokenString string) (*auth.Claims, error) {
+func GetClaimsFromToken(tokenString, jwtSecret string) (*auth.Claims, error) {
 	claims := &auth.Claims{}
+
+	tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 
 	token, err := jwt.ParseWithClaims(
 		tokenString,
@@ -26,7 +28,7 @@ func GetClaimsFromToken(tokenString string) (*auth.Claims, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return cfg.AppConfig.JWT.Secret, nil
+			return []byte(jwtSecret), nil
 		},
 	)
 
