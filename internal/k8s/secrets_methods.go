@@ -9,10 +9,12 @@ import (
 	"github.com/google/uuid"
 	secretsv1alpha1 "github.com/mogilyoy/k8s-secret-manager/api/v1alpha1"
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
+	"github.com/mogilyoy/k8s-secret-manager/internal/observability"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
@@ -66,6 +68,13 @@ func (m *K8sDynamicClient) CreateSecretClaim(ctx context.Context, name, namespac
 		annotationsToSet = *annotations
 	}
 
+	traceparent := observability.GetTraceParentHeader(ctx)
+	if traceparent != "" {
+		annotationsToSet[observability.K8sTraceparentAnnotationKey] = traceparent
+		span.SetAttributes(attribute.String("traceparent.propagation", traceparent))
+		m.Logger.Debug("Propagating traceparent to SecretClaim annotations", slog.String("traceparent", traceparent))
+	}
+
 	claim := &secretsv1alpha1.SecretClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
@@ -114,6 +123,12 @@ func (m *K8sDynamicClient) UpdateSecretClaim(ctx context.Context, name, namespac
 	}
 	if annotations != nil {
 		existingClaim.ObjectMeta.Annotations = *annotations
+	}
+	traceparent := observability.GetTraceParentHeader(ctx)
+	if traceparent != "" {
+		existingClaim.Annotations[observability.K8sTraceparentAnnotationKey] = traceparent
+		span.SetAttributes(attribute.String("traceparent.propagation", traceparent))
+		m.Logger.Debug("Propagating traceparent to SecretClaim annotations", slog.String("traceparent", traceparent))
 	}
 
 	switch existingClaim.Spec.Type {
