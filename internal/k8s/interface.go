@@ -9,6 +9,7 @@ import (
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -16,11 +17,11 @@ import (
 )
 
 type SecretClaimsInterface interface {
-	CreateSecretClaim(ctx context.Context, name, namespace, claimType string, data *map[string]string, generationConfig *api.GenerationConfig) error
+	CreateSecretClaim(ctx context.Context, name, namespace, claimType string, data *map[string]string, generationConfig *api.GenerationConfig, labels *map[string]string, annotations *map[string]string) error
 	GetSecretClaim(ctx context.Context, name, namespace string) (*secretsv1alpha1.SecretClaim, error)
-	GetActualSecretData(ctx context.Context, name, namespace string) (map[string]string, error)
+	GetActualSecret(ctx context.Context, name, namespace string) (*corev1.Secret, error)
 	ListSecretClaim(ctx context.Context, namespace string) (*secretsv1alpha1.SecretClaimList, error)
-	UpdateSecretClaim(ctx context.Context, name, namespace, claimType string, regenerate bool, data *map[string]string, generationConfig *api.GenerationConfig) (*secretsv1alpha1.SecretClaim, error)
+	UpdateSecretClaim(ctx context.Context, name, namespace, claimType string, regenerate bool, data *map[string]string, generationConfig *api.GenerationConfig, labels *map[string]string, annotations *map[string]string) error
 	DeleteSecretClaim(ctx context.Context, name, namespace string) error
 }
 

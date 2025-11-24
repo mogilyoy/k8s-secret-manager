@@ -8,6 +8,7 @@ import (
 	"github.com/mogilyoy/k8s-secret-manager/internal/auth"
 	"github.com/mogilyoy/k8s-secret-manager/internal/observability"
 	"go.opentelemetry.io/otel/codes"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func (h *SecretHandler) CreateSecret(ctx context.Context, request api.CreateSecretRequestObject) (api.CreateSecretResponseObject, error) {
@@ -27,10 +28,10 @@ func (h *SecretHandler) CreateSecret(ctx context.Context, request api.CreateSecr
 		}), nil
 	}
 
-	if !auth.IsNamespaceAllowed(*request.Body.Namespace, claims.AllowedNamespaces) || claims.Role == "developer" {
+	if !auth.IsNamespaceAllowed(request.Body.Namespace, claims.AllowedNamespaces) || claims.Role == "developer" {
 		span.SetStatus(codes.Error, "Access denied")
 		logger.Warn("Access denied for namespace",
-			slog.String("namespace", *request.Body.Namespace),
+			slog.String("namespace", request.Body.Namespace),
 			slog.String("role", claims.Role))
 
 		return BuildCreateSecretErrorResponse(ErrorResult{
@@ -54,14 +55,13 @@ func (h *SecretHandler) CreateSecret(ctx context.Context, request api.CreateSecr
 			StatusCode:   400,
 		}), nil
 	}
-	dataToPass := request.Body.Data
-	configToPass := request.Body.GenerationConfig
-	err = h.K8sManager.CreateSecretClaim(ctx, request.Body.Name, *request.Body.Namespace, string(request.Body.Type), dataToPass, configToPass)
+
+	err = h.K8sManager.CreateSecretClaim(ctx, request.Body.Name, request.Body.Namespace, string(request.Body.Type), request.Body.Data, request.Body.GenerationConfig, request.Body.Labels, request.Body.Annotations)
 	if err != nil {
 		return BuildCreateSecretErrorResponse(HandleK8sError(ctx, err)), nil
 	}
 
-	logger.Info("Successfully created secret claim", slog.String("namespace", *request.Body.Namespace), slog.String("name", request.Body.Name))
+	logger.Info("Successfully created secret claim", slog.String("namespace", request.Body.Namespace), slog.String("name", request.Body.Name))
 	span.SetStatus(codes.Ok, "Success")
 	return api.CreateSecret201JSONResponse{
 		OkResponseJSONResponse: api.OkResponseJSONResponse{
@@ -104,17 +104,12 @@ func (h *SecretHandler) ListSecrets(ctx context.Context, request api.ListSecrets
 		return BuildListSecretsErrorResponse(HandleK8sError(ctx, err)), nil
 	}
 
-	secretResponses := make([]api.SecretResponse, 0, len(secretClaimList.Items))
-
-	for _, claim := range secretClaimList.Items {
-		response := mapClaimToSecretResponse(&claim, nil)
-		secretResponses = append(secretResponses, response)
-	}
+	secretSummaryItems := mapSecretListToResponseList(secretClaimList.Items)
 
 	logger.Info("Successfully fetched secret claims list", slog.String("namespace", request.Params.Namespace), slog.Int("count", len(secretClaimList.Items)))
 	span.SetStatus(codes.Ok, "Success")
 	return api.ListSecrets200JSONResponse{
-		Items: secretResponses,
+		Items: secretSummaryItems,
 	}, nil
 }
 
@@ -153,17 +148,22 @@ func (h *SecretHandler) GetSecret(ctx context.Context, request api.GetSecretRequ
 		return BuildGetSecretErrorResponse(HandleK8sError(ctx, err)), nil
 	}
 
-	var actualData map[string]string = nil
+	var actualData *corev1.Secret = nil
 	if secret.Status.Synced {
 
-		actualData, err = h.K8sManager.GetActualSecretData(ctx, request.Name, request.Params.Namespace)
+		actualData, err = h.K8sManager.GetActualSecret(ctx, request.Name, request.Params.Namespace)
 		if err != nil {
 			return BuildGetSecretErrorResponse(HandleK8sError(ctx, err)), nil
 		}
 	}
 
 	if actualData == nil && secret.Spec.Type == "Opaque" {
-		actualData = secret.Spec.Data
+		logger.Warn("SecretClaim is not synced yet; no actual secret data available", slog.String("namespace", request.Params.Namespace), slog.String("name", request.Name))
+		return BuildGetSecretErrorResponse(ErrorResult{
+			ErrorMessage: "SecretClaim is not synced yet; no actual secret data available",
+			ErrorCode:    "NotFound",
+			StatusCode:   404,
+		}), nil
 	}
 
 	secretResponse := mapClaimToSecretResponse(secret, actualData)
@@ -221,16 +221,18 @@ func (h *SecretHandler) UpdateSecret(ctx context.Context, request api.UpdateSecr
 		regenerate = *request.Body.Regenerate
 	}
 
-	updatedSecret, err := h.K8sManager.UpdateSecretClaim(ctx, request.Name, request.Params.Namespace, newType, regenerate, request.Body.Data, request.Body.GenerationConfig)
+	err = h.K8sManager.UpdateSecretClaim(ctx, request.Name, request.Params.Namespace, newType, regenerate, request.Body.Data, request.Body.GenerationConfig, request.Body.Labels, request.Body.Annotations)
 	if err != nil {
 		return BuildUpdateSecretErrorResponse(HandleK8sError(ctx, err)), nil
 	}
 
-	secretResponse := mapClaimToSecretResponse(updatedSecret, nil)
-
 	logger.Info("Successfully updated secret claim", slog.String("namespace", request.Params.Namespace), slog.String("name", request.Name))
 	span.SetStatus(codes.Ok, "Success")
-	return api.UpdateSecret200JSONResponse(secretResponse), nil
+	return api.UpdateSecret200JSONResponse{
+		OkResponseJSONResponse: api.OkResponseJSONResponse{
+			Ok: BoolPnc(true),
+		},
+	}, nil
 }
 
 func (h *SecretHandler) DeleteSecret(ctx context.Context, request api.DeleteSecretRequestObject) (api.DeleteSecretResponseObject, error) {
