@@ -85,14 +85,12 @@ func NewSlogMiddleware(baseLogger *slog.Logger) func(next http.Handler) http.Han
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-			// 4. Вызываем .With()
 			requestLogger := baseLogger.With(
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.String("request_id", middleware.GetReqID(r.Context())),
 			)
 
-			// 5. requestLogger помещается в контекст
 			ctx := context.WithValue(r.Context(), LoggerContextKey, requestLogger)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -104,7 +102,7 @@ func LoggerFromContext(ctx context.Context) *slog.Logger {
 	if logger, ok := ctx.Value(LoggerContextKey).(*slog.Logger); ok {
 		return logger
 	}
-	return slog.Default() // if no logger found
+	return slog.Default()
 }
 
 func SlogRequestLogger() func(next http.Handler) http.Handler {

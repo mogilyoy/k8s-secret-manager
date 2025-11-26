@@ -10,13 +10,13 @@ info:
     identifier: Apache-2.0
     
 servers:
-  - url: https://dev.k8s-vault.com/v1
+  - url: https://dev.k8s-vault.com
     description: Development server
 
-  - url: https://staging.k8s-vault.com/v1
+  - url: https://staging.k8s-vault.com
     description: Staging server
 
-  - url: https://api.k8s-vault.com/v1
+  - url: https://api.k8s-vault.com
     description: Production server
 
 
