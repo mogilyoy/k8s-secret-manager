@@ -17,6 +17,10 @@ func JWTAuthMiddleware(jwtSecret string) func(next http.Handler) http.Handler {
 				sendErrorResponse(w, http.StatusUnauthorized, "Unauthorized", "Missing or invalid Authorization header.")
 				return
 			}
+			if jwtSecret == "" {
+				sendErrorResponse(w, http.StatusInternalServerError, "InternalError", "JWT Secret is empty")
+				return
+			}
 
 			claims, err := GetClaimsFromToken(token, jwtSecret)
 

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -11,6 +12,9 @@ import (
 var ErrUnauthorizedToken = errors.New("authentication failed: token is invalid or expired")
 
 func GenerateJWT(user *cfg.User, expiresIn int64, JWTSecret string) (string, error) {
+	if JWTSecret == "" {
+		return "", fmt.Errorf("jwt secret is empty")
+	}
 	now := time.Now()
 	expirationTime := time.Now().Add(time.Duration(expiresIn) * time.Second)
 
