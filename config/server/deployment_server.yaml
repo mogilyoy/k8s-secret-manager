@@ -1,60 +1,76 @@
-# Deployment для REST API сервера
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: secret-api-server
-  labels:
-    app: secret-api-server
+  name: api-server
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: secret-api-server
+      app: api-server
   template:
     metadata:
       labels:
-        app: secret-api-server
+        app: api-server
     spec:
-      # Используем ServiceAccount, созданный выше, для получения RBAC прав
-      serviceAccountName: secret-api-server-sa
+      serviceAccountName: api-server-sa
       containers:
       - name: api-server
-        image: secret-manager:latest
-        imagePullPolicy: IfNotPresent
+        image: controller:latest
         ports:
         - containerPort: 8080
-          name: http
-        
-        command: ["/server"] 
-        args:
-        - "--port=8080" 
-        
-        resources:
-          limits:
-            cpu: 200m
-            memory: 256Mi
-          requests:
-            cpu: 100m
-            memory: 128Mi
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 65532 
-          capabilities:
-            drop:
-            - ALL
+        env:
+        - name: CONFIG_PATH
+          value: "/config/config.yaml"
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: api-jwt-secret
+              key: JWT_SECRET
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+      volumes:
+      - name: config-volume
+        configMap:
+          name: api-server-config
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-server-config
+data:
+  config.yaml: |  
+    service: 
+      name: k8s-secret-manager
+      version: 1.0.0
+      port: :8080
 
+
+    users:
+      - id: "356366758"
+        username: admin
+        pwd: $2a$10$0teWtw1zeBS.SY5ytsKdyeQVtVvz8w54e8Px01cI6359FQtBWratK  # Admin
+        role: admin
+        allowed_namespaces: ["*"] 
+      - id: "987654321"
+        username: dev1
+        pwd: $2a$10$O9XIt8mkEOXbrvMEl1m3P.RdW2aTEZHBVOaKhG3OPj82OOA7qFPl2  # SpellCasting
+        role: developer
+        allowed_namespaces: ["dev-one", "staging"]
+      - id: "235634656"
+        username: dev2
+        pwd: $2a$10$eNu1N/whZhZm2IOOPlSyi.uTWNPlI15l6khRvcJqsgVltIZ0ztcay  # Yeeeeet1917 
+        role: developer
+        allowed_namespaces: ["dev-two"]
+  
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: secret-api-service
+  name: api-server
 spec:
   selector:
-    app: secret-api-server
+    app: api-server
   ports:
   - port: 80
     targetPort: 8080
-    protocol: TCP
-  type: LoadBalancer

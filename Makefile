@@ -162,29 +162,34 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	@out="$$( "$(KUSTOMIZE)" build config/crd 2>/dev/null || true )"; \
 	if [ -n "$$out" ]; then echo "$$out" | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -; else echo "No CRDs to delete; skipping."; fi
 
-.PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+.PHONY: deploy 
+deploy: deploy-rbac
+	manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
 
 .PHONY: deploy-server
-deploy-server: manifests kustomize ## Deploy the REST API server to the K8s cluster.
+deploy-server: manifests kustomize ## Deploy the REST API server to the K8s cluster
 	@echo "Deploying REST API Server..."
 	mkdir -p config/server/temp
-	cp config/server/deployment_server.yaml config/server/rbac_server.yaml config/server/temp/
 	echo "apiVersion: kustomize.config.k8s.io/v1beta1" > config/server/temp/kustomization.yaml
 	echo "kind: Kustomization" >> config/server/temp/kustomization.yaml
 	echo "resources:" >> config/server/temp/kustomization.yaml
 	echo "- deployment_server.yaml" >> config/server/temp/kustomization.yaml
-	echo "- rbac_server.yaml" >> config/server/temp/kustomization.yaml
 	cd config/server/temp && "$(KUSTOMIZE)" edit set image secret-manager:latest=${IMG}
 	"$(KUSTOMIZE)" build config/server/temp | "$(KUBECTL)" apply -f -
 	rm -rf config/server/temp
 
+.PHONY: deploy-rbac
+deploy-rbac:
+	kubectl apply -f config/rbac/api-server-sa.yaml
+	kubectl apply -f config/rbac/secretclaim_manager_role.yaml
+	kubectl apply -f config/rbac/secretclaim_manager_binding.yaml
+
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -
-	"$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f config/server/deployment_server.yaml config/server/rbac_server.yaml
+	"$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f config/server/deployment_server.yaml
 
 ##@ Dependencies
 

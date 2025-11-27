@@ -34,7 +34,8 @@ func main() {
 
 	slog.SetDefault(logger)
 
-	config, err := cfg.LoadConfig()
+	configPath := os.Getenv("CONFIG_PATH")
+	config, err := cfg.LoadConfig(configPath)
 	if err != nil {
 		slog.Error("❌ FATAL: Failed to load config: %v", slog.Any("error", err))
 		os.Exit(1)

@@ -36,14 +36,17 @@ type JWTConfig struct {
 var AppConfig Config
 
 func LoadConfig() (*Config, error) {
-	data, err := os.ReadFile("internal/cfg/users-config.yaml")
+	configPath := os.Getenv("CONFIG_PATH")
+	envSecret := os.Getenv("JWT_SECRET")
+
+	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 	if err := yaml.Unmarshal(data, &AppConfig); err != nil {
 		return nil, fmt.Errorf("failed to parse config: %w", err)
 	}
-	if envSecret := os.Getenv("JWT_SECRET"); envSecret != "" {
+	if envSecret != "" {
 		AppConfig.JWT.Secret = envSecret
 	}
 	return &AppConfig, nil
