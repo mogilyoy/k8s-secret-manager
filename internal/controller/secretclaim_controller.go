@@ -217,13 +217,6 @@ func (r *SecretClaimReconciler) createSecret(ctx context.Context, claim *secrets
 
 		span.AddEvent("Starting keys generation")
 		for _, key := range claim.Spec.Generation.DataKeys {
-			if claim.Spec.Generation.Length < 8 {
-				baseErr := errors.NewBadRequest("length less than 8")
-				err = fmt.Errorf("password must contain at least 8 symbols %s: %w", key, baseErr)
-				span.RecordError(err)
-				span.SetStatus(codes.Error, "Password Generation Failed")
-				return err
-			}
 			password, err := generatePassword(claim.Spec.Generation.Length, claim.Spec.Generation.Encoding)
 			if err != nil {
 				err = fmt.Errorf("failed to generate password for key %s: %w", key, err)
@@ -297,13 +290,7 @@ func (r *SecretClaimReconciler) updateSecret(ctx context.Context, claim *secrets
 
 		span.AddEvent("Starting password regeneration")
 		for _, key := range claim.Spec.Generation.DataKeys {
-			if claim.Spec.Generation.Length < 8 {
-				baseErr := errors.NewBadRequest("length less than 8")
-				err = fmt.Errorf("password must contain at least 8 symbols %s: %w", key, baseErr)
-				span.RecordError(err)
-				span.SetStatus(codes.Error, "Password Generation Failed")
-				return err
-			}
+
 			password, genErr := generatePassword(claim.Spec.Generation.Length, claim.Spec.Generation.Encoding)
 			if genErr != nil {
 				err = fmt.Errorf("failed to generate password for key %s: %w", key, genErr)
