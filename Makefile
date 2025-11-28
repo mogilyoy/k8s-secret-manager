@@ -1,6 +1,6 @@
 # Image URL to use all building/pushing image targets
-IMG ?= controller:v1.0.0
-
+IMG_CONTROLLER ?= controller:latest
+IMG_SERVER ?= secret-api:latest
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -117,7 +117,8 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build  --target=controller -t ${IMG_CONTROLLER} .
+	$(CONTAINER_TOOL) build --target=api-server -t ${IMG_SERVER} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -129,21 +130,11 @@ docker-push: ## Push docker image with the manager.
 # - have enabled BuildKit. More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 # - be able to push the image to your registry (i.e. if you do not set a valid value via IMG=<myregistry/image:<tag>> then the export will fail)
 # To adequately provide solutions that are compatible with multiple platforms, you should consider using this option.
-PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
-.PHONY: docker-buildx
-docker-buildx: ## Build and push docker image for the manager for cross-platform support
-	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
-	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name k8s-secret-manager-builder
-	$(CONTAINER_TOOL) buildx use k8s-secret-manager-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm k8s-secret-manager-builder
-	rm Dockerfile.cross
 
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
+	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG_CONTROLLER}
 	"$(KUSTOMIZE)" build config/default > dist/install.yaml
 
 ##@ Deployment
@@ -162,23 +153,16 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	@out="$$( "$(KUSTOMIZE)" build config/crd 2>/dev/null || true )"; \
 	if [ -n "$$out" ]; then echo "$$out" | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -; else echo "No CRDs to delete; skipping."; fi
 
-.PHONY: deploy 
-deploy: deploy-rbac
-	manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && "$(KUSTOMIZE)" edit set image controller=${IMG}
-	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" apply -f -
+.PHONY: deploy-operator
+deploy-operator: manifests kustomize
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_CONTROLLER}
+	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
-.PHONY: deploy-server
-deploy-server: manifests kustomize ## Deploy the REST API server to the K8s cluster
-	@echo "Deploying REST API Server..."
-	mkdir -p config/server/temp
-	echo "apiVersion: kustomize.config.k8s.io/v1beta1" > config/server/temp/kustomization.yaml
-	echo "kind: Kustomization" >> config/server/temp/kustomization.yaml
-	echo "resources:" >> config/server/temp/kustomization.yaml
-	echo "- deployment_server.yaml" >> config/server/temp/kustomization.yaml
-	cd config/server/temp && "$(KUSTOMIZE)" edit set image secret-manager:latest=${IMG}
-	"$(KUSTOMIZE)" build config/server/temp | "$(KUBECTL)" apply -f -
-	rm -rf config/server/temp
+.PHONY: deploy-api
+deploy-api:
+	$(KUBECTL) apply -f config/api-server
+
+deploy: docker-build deploy-rbac deploy-operator deploy-api
 
 .PHONY: deploy-rbac
 deploy-rbac:
@@ -190,6 +174,24 @@ deploy-rbac:
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -
 	"$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f config/server/deployment_server.yaml
+
+## Tests 
+
+.PHONY: test
+test: ## Run operator & API tests in parallel
+	$(MAKE) test-operator &
+	OP_PID=$$!
+	$(MAKE) test-api &
+	API_PID=$$!
+	wait $$OP_PID $$API_PID
+
+.PHONY: test-operator
+test-operator: setup-envtest
+	go test ./internal/controller/...
+
+.PHONY: test-api
+test-api:
+	go test ./internal/k8s/... ./internal/handlers/...
 
 ##@ Dependencies
 

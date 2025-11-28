@@ -18,9 +18,14 @@ package controller
 
 import (
 	"context"
+	"io"
+	"log/slog"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.opentelemetry.io/otel"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -32,53 +37,139 @@ import (
 
 var _ = Describe("SecretClaim Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		const (
+			resourceName = "test-resource"
+			namespace    = "default"
+		)
 
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		secretclaim := &secretsv1alpha1.SecretClaim{}
+		var (
+			ctx        context.Context
+			key        types.NamespacedName
+			reconciler *SecretClaimReconciler
+		)
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind SecretClaim")
-			err := k8sClient.Get(ctx, typeNamespacedName, secretclaim)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &secretsv1alpha1.SecretClaim{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
+			ctx = context.Background()
+			key = types.NamespacedName{Name: resourceName, Namespace: namespace}
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &secretsv1alpha1.SecretClaim{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance SecretClaim")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &SecretClaimReconciler{
+			reconciler = &SecretClaimReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
+				Tracer: otel.Tracer("test"),
+				Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 			}
 
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
+			_ = k8sClient.Delete(ctx, &secretsv1alpha1.SecretClaim{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace}})
+			_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace}})
+		})
+
+		It("should create Secret when SecretClaim created", func() {
+			claim := &secretsv1alpha1.SecretClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace},
+				Spec: secretsv1alpha1.SecretClaimSpec{
+					Type: "Opaque",
+					Data: map[string]string{"foo": "bar"},
+				},
+			}
+			Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			var secret corev1.Secret
+			Eventually(func() error {
+				return k8sClient.Get(ctx, key, &secret)
+			}).Should(Succeed())
+
+			Expect(secret.Data).To(HaveKeyWithValue("foo", []byte("bar")))
+			Expect(secret.OwnerReferences).ToNot(BeEmpty())
+
+			owner := secret.OwnerReferences[0]
+			Expect(owner.Name).To(Equal(claim.Name))
+			Expect(owner.Kind).To(Equal("SecretClaim"))
+			Expect(owner.UID).To(Equal(claim.UID))
+			Expect(owner.Controller).ToNot(BeNil())
+			Expect(*owner.Controller).To(BeTrue())
+		})
+
+		It("should update Secret when SecretClaim updated", func() {
+			claim := &secretsv1alpha1.SecretClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace},
+				Spec:       secretsv1alpha1.SecretClaimSpec{Type: "Opaque", Data: map[string]string{"foo": "bar"}},
+			}
+			Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			createdSecretClaim := &secretsv1alpha1.SecretClaim{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, key, createdSecretClaim)
+			}).Should(Succeed())
+
+			// Обновляем SecretClaim
+			createdSecretClaim.Spec.Data = map[string]string{"fofof": "abba"}
+			Expect(k8sClient.Update(ctx, createdSecretClaim)).To(Succeed())
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			var secret corev1.Secret
+			Eventually(func() error {
+				return k8sClient.Get(ctx, key, &secret)
+			}).Should(Succeed())
+
+			Expect(secret.Data).To(HaveKeyWithValue("fofof", []byte("abba")))
+		})
+
+		It("should skip reconciliation when SecretClaim is deleted", func() {
+			claim := &secretsv1alpha1.SecretClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace},
+				Spec:       secretsv1alpha1.SecretClaimSpec{Type: "Opaque", Data: map[string]string{"foo": "bar"}},
+			}
+			Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+
+			var secret corev1.Secret
+			Eventually(func() error {
+				return k8sClient.Get(ctx, key, &secret)
+			}).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, claim)).To(Succeed())
+
+			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should handle invalid SecretClaim gracefully", func() {
+			claim := &secretsv1alpha1.SecretClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: resourceName, Namespace: namespace},
+				Spec: secretsv1alpha1.SecretClaimSpec{
+					Type: "AutoGenerated",
+					Generation: &secretsv1alpha1.GenerationConfig{
+						Length:   4,
+						DataKeys: []string{"password"},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, claim)).To(Succeed())
+
+			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: key})
+			Expect(err).To(HaveOccurred())
+
+			Eventually(func() bool {
+				err := k8sClient.Get(ctx, key, &corev1.Secret{})
+				return errors.IsNotFound(err)
+			}, time.Second*5, time.Millisecond*250).Should(BeTrue())
+
+			var updatedClaim secretsv1alpha1.SecretClaim
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, key, &updatedClaim)).To(Succeed())
+				g.Expect(updatedClaim.Status.ErrorMessage).To(ContainSubstring("8 symbols"))
+				g.Expect(updatedClaim.Status.Synced).To(BeFalse())
+			}, time.Second*5).Should(Succeed())
 		})
 	})
 })
