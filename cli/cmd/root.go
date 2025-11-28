@@ -52,7 +52,7 @@ func init() {
 
 	loadToken()
 
-	defaultServerURL := "https://localhost:8080"
+	defaultServerURL := "http://localhost:8080"
 	if serverURL != "" {
 		defaultServerURL = serverURL
 	}

@@ -9,6 +9,7 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -26,10 +27,9 @@ type ContextHandler struct {
 
 func InitTracer() *sdktrace.TracerProvider {
 
-	res, err := resource.Merge(
-		resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
+	res, err := resource.New(
+		context.Background(),
+		resource.WithAttributes(
 			semconv.ServiceName(cfg.AppConfig.Service.Name),
 			semconv.ServiceVersion(cfg.AppConfig.Service.Version),
 		),
@@ -84,11 +84,16 @@ func NewOTelMiddleware(serviceName string) func(next http.Handler) http.Handler 
 func NewSlogMiddleware(baseLogger *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reqID := middleware.GetReqID(r.Context())
+
+			if span := trace.SpanFromContext(r.Context()); span != nil {
+				span.SetAttributes(attribute.String("request.id", reqID))
+			}
 
 			requestLogger := baseLogger.With(
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
-				slog.String("request_id", middleware.GetReqID(r.Context())),
+				slog.String("request_id", reqID),
 			)
 
 			ctx := context.WithValue(r.Context(), LoggerContextKey, requestLogger)

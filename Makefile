@@ -1,6 +1,6 @@
 # Image URL to use all building/pushing image targets
-IMG_CONTROLLER ?= controller:latest
-IMG_SERVER ?= secret-api:latest
+IMG_CONTROLLER ?= controller:v0.0.2
+IMG_SERVER ?= secret-api:v0.0.3
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -61,6 +61,20 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
+.PHONY: test-operator
+test-operator: setup-envtest
+	go test ./internal/controller/...
+
+.PHONY: test-api
+test-api:
+	go test ./internal/k8s/... ./internal/handlers/...
+
+
+.PHONY: cli 
+cli: 
+	go build -o ksec ./cli
+	@echo "====== ksec cli installed successfully! write ./ksec to start ======"
+
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # CertManager is installed by default; skip with:
@@ -112,13 +126,6 @@ build: manifests generate fmt vet ## Build manager binary.
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/controller/main.go
 
-# If you wish to build the manager image targeting other platforms you can use the --platform flag.
-# (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
-# More info: https://docs.docker.com/develop/develop-images/build_enhancements/
-.PHONY: docker-build
-docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build  --target=controller -t ${IMG_CONTROLLER} .
-	$(CONTAINER_TOOL) build --target=api-server -t ${IMG_SERVER} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
@@ -153,6 +160,33 @@ uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified 
 	@out="$$( "$(KUSTOMIZE)" build config/crd 2>/dev/null || true )"; \
 	if [ -n "$$out" ]; then echo "$$out" | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -; else echo "No CRDs to delete; skipping."; fi
 
+deploy: docker-build deploy-namespace deploy-crds deploy-rbac deploy-operator deploy-api
+
+.PHONY: deploy-crds
+deploy-crds:
+	$(KUBECTL) apply -f config/crd/bases/
+
+.PHONY: deploy-rbac
+deploy-rbac:
+	for file in config/rbac/*.yaml; do \
+		if [[ "$$file" != *"kustomization.yaml" ]]; then \
+			$(KUBECTL) apply -f $$file; \
+		fi; \
+	done
+	$(KUBECTL) apply -f config/custom-rbac/
+
+
+.PHONY: docker-build
+docker-build:
+	$(CONTAINER_TOOL) build --target=controller -t ${IMG_CONTROLLER} .
+	$(CONTAINER_TOOL) build --target=api-server -t ${IMG_SERVER} .
+	minikube image load ${IMG_CONTROLLER}
+	minikube image load ${IMG_SERVER}
+
+.PHONY: deploy-namespace
+deploy-namespace:
+	$(KUBECTL) create namespace k8s-secret-manager-system || true
+
 .PHONY: deploy-operator
 deploy-operator: manifests kustomize
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG_CONTROLLER}
@@ -160,38 +194,13 @@ deploy-operator: manifests kustomize
 
 .PHONY: deploy-api
 deploy-api:
-	$(KUBECTL) apply -f config/api-server
-
-deploy: docker-build deploy-rbac deploy-operator deploy-api
-
-.PHONY: deploy-rbac
-deploy-rbac:
-	kubectl apply -f config/rbac/api-server-sa.yaml
-	kubectl apply -f config/rbac/secretclaim_manager_role.yaml
-	kubectl apply -f config/rbac/secretclaim_manager_binding.yaml
+	$(KUBECTL) apply -f config/server/deployment_server.yaml
 
 .PHONY: undeploy
-undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	"$(KUSTOMIZE)" build config/default | "$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f -
-	"$(KUBECTL)" delete --ignore-not-found=$(ignore-not-found) -f config/server/deployment_server.yaml
-
-## Tests 
-
-.PHONY: test
-test: ## Run operator & API tests in parallel
-	$(MAKE) test-operator &
-	OP_PID=$$!
-	$(MAKE) test-api &
-	API_PID=$$!
-	wait $$OP_PID $$API_PID
-
-.PHONY: test-operator
-test-operator: setup-envtest
-	go test ./internal/controller/...
-
-.PHONY: test-api
-test-api:
-	go test ./internal/k8s/... ./internal/handlers/...
+undeploy:
+	$(KUBECTL) delete -f config/custom-rbac/ || true
+	$(KUSTOMIZE) build config/default | $(KUBECTL) delete -f - || true
+	$(KUBECTL) delete -f config/crd/bases/ || true
 
 ##@ Dependencies
 

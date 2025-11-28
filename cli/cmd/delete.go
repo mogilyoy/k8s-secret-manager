@@ -25,7 +25,7 @@ var deleteCmd = &cobra.Command{
 	Long: `Deletes a specific SecretClaim resource by its name and namespace. 
 This corresponds to the DELETE /secrets/{name} API endpoint.`,
 	Example: `  ksec delete my-old-secret -n staging
-  ksec delete another-secret -n dev --force`,
+  ./ksec delete another-secret -n dev --force`,
 	Args: cobra.ExactArgs(1),
 	RunE: runDeleteSecret,
 }
@@ -33,11 +33,10 @@ This corresponds to the DELETE /secrets/{name} API endpoint.`,
 func init() {
 	rootCmd.AddCommand(deleteCmd)
 
-	deleteCmd.Flags().StringVarP(&deleteNamespace, "namespace", "n", "", "Target Kubernetes namespace (required)")
+	deleteCmd.Flags().StringVarP(&deleteNamespace, "namespace", "n", "default", "Target Kubernetes namespace (required)")
 
 	deleteCmd.Flags().BoolVarP(&deleteForce, "force", "f", false, "Skip confirmation prompt")
 
-	deleteCmd.MarkFlagRequired("namespace")
 }
 
 func runDeleteSecret(cmd *cobra.Command, args []string) error {

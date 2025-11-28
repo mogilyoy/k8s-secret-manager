@@ -25,7 +25,6 @@ func MapStrStrPnc(v map[string]string) *map[string]string {
 }
 
 func mapClaimToSecretResponse(claim *secretsv1alpha1.SecretClaim, secret *corev1.Secret) api.SecretResponse {
-	// 1. Определение высокоуровневого статуса (CurrentStatus)
 	externalStatus := "Pending"
 	var errorMessage *string = nil
 	var secretName *string = nil

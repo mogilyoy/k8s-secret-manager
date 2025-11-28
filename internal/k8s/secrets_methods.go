@@ -2,9 +2,11 @@ package k8s
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/google/uuid"
 	secretsv1alpha1 "github.com/mogilyoy/k8s-secret-manager/api/v1alpha1"
@@ -45,10 +47,26 @@ func (m *K8sDynamicClient) CreateSecretClaim(ctx context.Context, name, namespac
 			m.Logger.Error("K8s: invalid generationConfig", slog.String("namespace", namespace), slog.String("name", name), slog.Int("length", int(generationConfig.Length)))
 			return fmt.Errorf("invalid generationConfig")
 		}
+
+		var dataKeys []string
+		if len(*generationConfig.DataKeys) == 1 {
+			jsonKeys := (*generationConfig.DataKeys)[0]
+			if err := json.Unmarshal([]byte(jsonKeys), &dataKeys); err == nil {
+				m.Logger.Debug("Parsed JSON DataKeys", slog.Any("keys", dataKeys))
+			} else {
+				dataKeys = strings.Split(jsonKeys, ",")
+				for i, key := range dataKeys {
+					dataKeys[i] = strings.TrimSpace(key)
+				}
+			}
+		} else {
+			dataKeys = *generationConfig.DataKeys
+		}
+
 		spec.Generation = &secretsv1alpha1.GenerationConfig{
 			Length:           int(generationConfig.Length),
 			Encoding:         string(*generationConfig.Encoding),
-			DataKeys:         *generationConfig.DataKeys,
+			DataKeys:         dataKeys,
 			ReconcileTrigger: uuid.NewString(),
 		}
 
@@ -141,10 +159,25 @@ func (m *K8sDynamicClient) UpdateSecretClaim(ctx context.Context, name, namespac
 				return fmt.Errorf("invalid generationConfig")
 			}
 
+			var dataKeys []string
+			if len(*generationConfig.DataKeys) == 1 {
+				jsonKeys := (*generationConfig.DataKeys)[0]
+				if err := json.Unmarshal([]byte(jsonKeys), &dataKeys); err == nil {
+					m.Logger.Debug("Parsed JSON DataKeys", slog.Any("keys", dataKeys))
+				} else {
+					dataKeys = strings.Split(jsonKeys, ",")
+					for i, key := range dataKeys {
+						dataKeys[i] = strings.TrimSpace(key)
+					}
+				}
+			} else {
+				dataKeys = *generationConfig.DataKeys
+			}
+
 			existingClaim.Spec.Generation = &secretsv1alpha1.GenerationConfig{
 				Length:   int(generationConfig.Length),
 				Encoding: string(*generationConfig.Encoding),
-				DataKeys: *generationConfig.DataKeys,
+				DataKeys: dataKeys,
 			}
 		}
 

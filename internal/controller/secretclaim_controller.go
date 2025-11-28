@@ -63,10 +63,18 @@ type SecretClaimReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/reconcile
 func (r *SecretClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := r.Log.With(
+	logger := r.Log
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger = logger.With(
 		slog.String("namespace", req.Namespace),
 		slog.String("name", req.Name),
 	)
+
+	if r.Tracer == nil {
+		r.Tracer = otel.Tracer("k8s-secret-manager")
+	}
 
 	var span trace.Span
 	var reconcileError error = nil
@@ -217,6 +225,13 @@ func (r *SecretClaimReconciler) createSecret(ctx context.Context, claim *secrets
 
 		span.AddEvent("Starting keys generation")
 		for _, key := range claim.Spec.Generation.DataKeys {
+			if claim.Spec.Generation.Length < 8 {
+				err = fmt.Errorf("secrets should be at least 8 symbols")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "Secret lenght <8")
+				return err
+			}
+
 			password, err := generatePassword(claim.Spec.Generation.Length, claim.Spec.Generation.Encoding)
 			if err != nil {
 				err = fmt.Errorf("failed to generate password for key %s: %w", key, err)
@@ -291,6 +306,12 @@ func (r *SecretClaimReconciler) updateSecret(ctx context.Context, claim *secrets
 		span.AddEvent("Starting password regeneration")
 		for _, key := range claim.Spec.Generation.DataKeys {
 
+			if claim.Spec.Generation.Length < 8 {
+				err = fmt.Errorf("secrets should be at least 8 symbols")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, "Secret lenght <8")
+				return err
+			}
 			password, genErr := generatePassword(claim.Spec.Generation.Length, claim.Spec.Generation.Encoding)
 			if genErr != nil {
 				err = fmt.Errorf("failed to generate password for key %s: %w", key, genErr)
@@ -363,6 +384,12 @@ func (r *SecretClaimReconciler) updateStatus(ctx context.Context, claim *secrets
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SecretClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Log == nil {
+		r.Log = slog.Default()
+	}
+	if r.Tracer == nil {
+		r.Tracer = otel.Tracer("k8s-secret-manager")
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&secretsv1alpha1.SecretClaim{}).
 		Named("secretclaim").

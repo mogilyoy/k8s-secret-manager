@@ -35,11 +35,11 @@ var loginCmd = &cobra.Command{
 and stores the resulting JWT token for subsequent API calls. If the password is not 
 provided via a flag, the CLI will securely prompt for it.`,
 	Example: `
-  ksec login -u admin 
+  ./ksec login -u admin 
   > password:
 
   # Pass password directly (less secure)
-  ksec login -u admin -p secure_pass`,
+  ./ksec login -u admin -p secure_pass`,
 	RunE: runLogin,
 }
 

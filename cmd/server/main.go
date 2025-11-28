@@ -18,6 +18,17 @@ import (
 )
 
 func main() {
+	config, err := cfg.LoadConfig()
+
+	if err != nil {
+		slog.Error("❌ FATAL: Failed to load config: %v", slog.Any("error", err))
+		os.Exit(1)
+	}
+	if config.JWT.Secret == "" {
+		slog.Error("❌ FATAL: JWT secret is empty. Set via config.yaml or JWT_SECRET environment variable.")
+		os.Exit(1)
+	}
+	slog.Info("✅ Configuration loaded successfully.")
 
 	tp := observability.InitTracer()
 	defer func() {
@@ -33,17 +44,6 @@ func main() {
 	})
 
 	slog.SetDefault(logger)
-
-	config, err := cfg.LoadConfig()
-	if err != nil {
-		slog.Error("❌ FATAL: Failed to load config: %v", slog.Any("error", err))
-		os.Exit(1)
-	}
-	if config.JWT.Secret == "" {
-		slog.Error("❌ FATAL: JWT secret is empty. Set via config.yaml or JWT_SECRET environment variable.")
-		os.Exit(1)
-	}
-	slog.Info("✅ Configuration loaded successfully.")
 
 	k8sManager, err := k8s.NewK8sSecretManager(logger, tp)
 	if err != nil {

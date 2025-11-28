@@ -23,16 +23,14 @@ var listCmd = &cobra.Command{
 	Short:   "List available SecretClaim resources in a namespace",
 	Long: `Lists all SecretClaim resources available in the specified namespace. 
 This corresponds to the GET /secrets API endpoint.`,
-	Example: `  ksec list -n staging`,
+	Example: `  ./ksec list -n staging`,
 	RunE:    runListSecrets,
 }
 
 func init() {
 	rootCmd.AddCommand(listCmd)
 
-	listCmd.Flags().StringVarP(&listNamespace, "namespace", "n", "", "Target Kubernetes namespace (required)")
-
-	listCmd.MarkFlagRequired("namespace")
+	listCmd.Flags().StringVarP(&listNamespace, "namespace", "n", "default", "Target Kubernetes namespace")
 }
 
 func runListSecrets(cmd *cobra.Command, args []string) error {

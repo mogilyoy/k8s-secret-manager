@@ -21,7 +21,7 @@ var getCmd = &cobra.Command{
 	Short: "Get full details of a SecretClaim resource",
 	Long: `Retrieves the full specification and current status, including secret data 
 (if synchronized), for a specific SecretClaim resource by its name.`,
-	Example: `  ksec get my-db-secret -n staging`,
+	Example: `  ./ksec get my-db-secret -n staging`,
 	Args:    cobra.ExactArgs(1),
 	RunE:    runGetSecret,
 }
@@ -29,9 +29,8 @@ var getCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(getCmd)
 
-	getCmd.Flags().StringVarP(&getNamespace, "namespace", "n", "", "Target Kubernetes namespace (required)")
+	getCmd.Flags().StringVarP(&getNamespace, "namespace", "n", "default", "Target Kubernetes namespace")
 
-	getCmd.MarkFlagRequired("namespace")
 }
 
 func runGetSecret(cmd *cobra.Command, args []string) error {
