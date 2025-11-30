@@ -1,0 +1,73 @@
+name: Deploy Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Set up Go 1.21
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.21
+        
+    - name: Install kubectl
+      run: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        chmod +x kubectl
+        sudo mv kubectl /usr/local/bin/
+        
+    - name: Install Minikube
+      uses: manusa/actions-setup-minikube@v2.8.0
+      with:
+        minikube version: 'v1.33.0'
+        kubernetes version: 'v1.29.4'
+        driver: docker
+        
+    - name: Start Minikube
+      run: |
+        minikube start --wait=all --drivers=docker
+        
+    - name: Create JWT Secret
+      run: |
+        kubectl create secret generic api-jwt-secret \
+          --from-literal=JWT_SECRET=super-dev-secret-change-me \
+          -n default --dry-run=client -o yaml | kubectl apply -f -
+        
+    - name: Build and Deploy
+      run: |
+        make docker-build
+        make deploy
+        
+    - name: Check Pods (default)
+      run: kubectl get pods -n default
+      
+    - name: Check Pods (k8s-secret-manager-system)  
+      run: kubectl get pods -n k8s-secret-manager-system
+      
+    - name: Wait for Pods Ready
+      run: |
+        kubectl wait --for=condition=ready pod \
+          --all -n k8s-secret-manager-system --timeout=300s
+        kubectl wait --for=condition=ready pod \
+          --all -n default --timeout=60s
+          
+    - name: Deploy Test Passed ✅
+      run: make test
+
+    - name: Deploy Test Passed ✅
+      run: echo "Deployment successful!"
+      
+    - name: Cleanup
+      if: always()
+      run: |
+        make undeploy || true
+        minikube delete || true
