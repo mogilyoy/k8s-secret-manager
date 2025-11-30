@@ -59,7 +59,9 @@ jobs:
           --all -n k8s-secret-manager-system --timeout=300s
         kubectl wait --for=condition=ready pod \
           --all -n default --timeout=60s
-          
+        kubectl get pods -n default
+        kubectl get pods -n k8s-secret-manager-system
+        
     - name: Unit tests
       run: make test
 
