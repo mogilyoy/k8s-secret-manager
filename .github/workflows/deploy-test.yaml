@@ -34,7 +34,7 @@ jobs:
         
     - name: Start Minikube
       run: |
-        minikube start --wait=all --drivers=docker
+        minikube start --wait=all --driver=docker
         
     - name: Create JWT Secret
       run: |
@@ -60,7 +60,7 @@ jobs:
         kubectl wait --for=condition=ready pod \
           --all -n default --timeout=60s
           
-    - name: Deploy Test Passed ✅
+    - name: Unit tests
       run: make test
 
     - name: Deploy Test Passed ✅
