@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
 	"github.com/spf13/cobra"
@@ -70,25 +69,32 @@ func runGetSecret(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// printSecretDetails форматирует и выводит полные детали секрета
 func printSecretDetails(s api.SecretResponse) {
 	fmt.Println("\n--- Secret Details ---")
+
+	created := "N/A"
+	if s.CreationTimestamp != nil {
+		created = s.CreationTimestamp.Format("2006-01-02 15:04:05")
+	}
 
 	namespace := *s.Namespace
 	fmt.Printf("Name:        %s\n", s.Name)
 	fmt.Printf("Namespace:   %s\n", namespace)
 	fmt.Printf("Type:        %s\n", s.Type)
 	fmt.Printf("UID:         %s\n", *s.Uid)
-	fmt.Printf("Created At:  %s\n", formatTimestamp(s.CreationTimestamp.String()))
+	fmt.Printf("Created At:  %s\n", created)
 
-	// Статус
 	fmt.Println("\n--- Status ---")
 	fmt.Printf("Current Status: %s\n", s.Status.CurrentStatus)
 	fmt.Printf("Synced:         %t\n", s.Status.Synced)
 	if s.Status.Synced {
+		lastSync := "N/A"
+		if s.CreationTimestamp != nil {
+			lastSync = s.CreationTimestamp.Format("2006-01-02 15:04:05")
+		}
 		secretName := *s.Status.SecretName
 		fmt.Printf("K8s Secret Name: %s\n", secretName)
-		fmt.Printf("Last Sync:       %s\n", formatTimestamp(s.Status.LastSyncTime.String()))
+		fmt.Printf("Last Sync:       %s\n", lastSync)
 	}
 	if s.Status.ErrorMessage != nil {
 		errMessage := *s.Status.ErrorMessage
@@ -114,14 +120,4 @@ func printSecretDetails(s api.SecretResponse) {
 			fmt.Printf("  %s: %s\n", k, v)
 		}
 	}
-}
-
-func formatTimestamp(ts string) string {
-	if ts == "" {
-		return "N/A"
-	}
-	if t, err := time.Parse(time.RFC3339, ts); err == nil {
-		return t.Format("2006-01-02 15:04:05 MST")
-	}
-	return ts
 }

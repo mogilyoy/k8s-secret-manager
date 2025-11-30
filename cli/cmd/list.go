@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/mogilyoy/k8s-secret-manager/internal/api"
 	"github.com/spf13/cobra"
@@ -87,8 +86,8 @@ func printSecretSummary(secrets []api.SecretSummary) {
 		}
 
 		created := "N/A"
-		if t, err := time.Parse(time.RFC3339, s.CreationTimestamp.String()); err == nil {
-			created = t.Format("2006-01-02 15:04:05")
+		if s.CreationTimestamp != nil {
+			created = s.CreationTimestamp.Format("2006-01-02 15:04:05")
 		}
 
 		fmt.Printf("%-30s %-15s %-15s %s\n", s.Name, s.Type, displayStatus, created)

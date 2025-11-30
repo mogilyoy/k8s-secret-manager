@@ -1,6 +1,6 @@
 # Image URL to use all building/pushing image targets
-IMG_CONTROLLER ?= controller:v0.0.2
-IMG_SERVER ?= secret-api:v0.0.3
+IMG_CONTROLLER ?= controller:v0.0.4
+IMG_SERVER ?= secret-api:v0.0.6
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin

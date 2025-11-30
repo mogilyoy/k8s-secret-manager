@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"reflect"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -148,7 +150,9 @@ func (r *SecretClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	if !metav1.IsControlledBy(&secret.ObjectMeta, &claim) {
-		logger.Warn("Secret exists but is not controlled by SecretClaim. Skipping.", slog.String("secret_name", targetSecretName))
+		logger.Warn("Secret exists but is not controlled by SecretClaim. Skipping.",
+			slog.Any("secret_owner_refs", secret.ObjectMeta.OwnerReferences),
+			slog.String("secret_name", targetSecretName))
 		return ctrl.Result{}, nil
 	}
 
@@ -174,6 +178,11 @@ func (r *SecretClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			logger.Info("Opaque data changed. Starting secret update.")
 			needsSecretUpdate = true
 		}
+	}
+
+	if !reflect.DeepEqual(claim.Labels, secret.Labels) || !reflect.DeepEqual(claim.Annotations, secret.Annotations) {
+		logger.Info("Labels or Annotations changed. Updating Secret metadata.")
+		needsSecretUpdate = true
 	}
 
 	if needsSecretUpdate {
@@ -330,6 +339,14 @@ func (r *SecretClaimReconciler) updateSecret(ctx context.Context, claim *secrets
 		return err
 	}
 
+	if claim.Annotations != nil {
+		existingSecret.Annotations = claim.Annotations
+	}
+
+	if claim.Labels != nil {
+		existingSecret.Labels = claim.Labels
+	}
+
 	existingSecret.Type = corev1.SecretTypeOpaque
 	existingSecret.Data = secretData
 
@@ -385,7 +402,7 @@ func (r *SecretClaimReconciler) updateStatus(ctx context.Context, claim *secrets
 // SetupWithManager sets up the controller with the Manager.
 func (r *SecretClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if r.Log == nil {
-		r.Log = slog.Default()
+		r.Log = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	}
 	if r.Tracer == nil {
 		r.Tracer = otel.Tracer("k8s-secret-manager")

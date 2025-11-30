@@ -15,7 +15,7 @@ spec:
       serviceAccountName: api-server-sa
       containers:
       - name: api-server
-        image: docker.io/library/secret-api:v0.0.3
+        image: docker.io/library/secret-api:v0.0.6
         imagePullPolicy: IfNotPresent
 
         ports:
