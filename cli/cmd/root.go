@@ -153,6 +153,26 @@ func saveToken(t string) error {
 	return nil
 }
 
+func saveServerUrl(u string) error {
+	configFile, err := getAppConfigPath()
+	if err != nil {
+		return err
+	}
+
+	cfg := Config{ServerURL: u}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(configFile, data, 0600); err != nil {
+		return fmt.Errorf("failed to write config file %s: %w", configFile, err)
+	}
+
+	fmt.Printf(" [Config] ServerUrl saved successfully to: %s\n", configFile)
+	return nil
+}
+
 func loadToken() {
 	configFile, err := getAppConfigPath()
 	if err != nil {

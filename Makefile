@@ -195,12 +195,14 @@ deploy-operator: manifests kustomize
 .PHONY: deploy-api
 deploy-api:
 	$(KUBECTL) apply -f config/server/deployment_server.yaml
+	$(KUBECTL) apply -f config/server/api-jwt-secret.yaml
 
 .PHONY: undeploy
 undeploy:
 	$(KUBECTL) delete -f config/custom-rbac/ || true
 	$(KUSTOMIZE) build config/default | $(KUBECTL) delete -f - || true
 	$(KUBECTL) delete -f config/crd/bases/ || true
+	$(KUBECTL) delete -f config/server/ --ignore-not-found=true || true
 
 ##@ Dependencies
 
@@ -211,6 +213,7 @@ $(LOCALBIN):
 
 ## Tool Binaries
 KUBECTL ?= kubectl
+MINIKUBE ?= minikube
 KIND ?= kind
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen

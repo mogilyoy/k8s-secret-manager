@@ -8,3 +8,4 @@ bin/setup-envtest*
 cover.out
 ksec
 secret_data.json
+config.json

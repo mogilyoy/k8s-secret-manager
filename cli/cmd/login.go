@@ -67,6 +67,14 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if serverURL != "" {
+		if err := saveServerUrl(serverURL); err != nil {
+			fmt.Printf("⚠️ Warning: Failed to save server URL: %s\n", err)
+		} else {
+			fmt.Printf("✅ Server URL saved: %s\n", serverURL)
+		}
+	}
+
 	authReq := api.AuthUserRequest{
 		Username: loginUsername,
 		Password: loginPassword,
